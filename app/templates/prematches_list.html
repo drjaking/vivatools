@@ -1,0 +1,44 @@
+<!-- app/templates/prematches_list.html -->
+{% if alert_message %}
+<div class="alert {% if alert_success %}alert-success{% else %}alert-danger{% endif %}" style="margin-bottom: 12px; font-size: 0.85rem; padding: 8px 12px; border-radius: var(--radius-sm);">
+    {{ alert_message }}
+</div>
+{% endif %}
+
+<div style="max-height: 300px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius-sm);">
+    {% if prematches %}
+    <table id="prematches-table">
+        <thead>
+            <tr>
+                <th class="sortable" onclick="sortPrematchesTable(0)">Student</th>
+                <th class="sortable" onclick="sortPrematchesTable(1)">Internal Examiner</th>
+                <th class="sortable" onclick="sortPrematchesTable(2)">External Examiner</th>
+                <th style="width: 80px;">Action</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for pm in prematches %}
+            <tr>
+                <td style="font-weight: 500;">🔒 {{ pm.student_name }}</td>
+                <td>{{ pm.internal_name or '—' }}</td>
+                <td>{{ pm.external_name or '—' }}</td>
+                <td>
+                    <button hx-post="/constraints/remove-prematch" 
+                            hx-vals='{"student_id": {{ pm.student_id }}}'
+                            hx-target="#prematches-list-container"
+                            class="btn btn-danger btn-sm"
+                            style="padding: 2px 6px; font-size: 0.75rem;">
+                        Remove
+                    </button>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    {% else %}
+    <div style="padding: 20px; text-align: center; color: var(--text-muted); font-size: 0.85rem;">
+        No active pre-matched student allocations in database.
+    </div>
+    {% endif %}
+</div>

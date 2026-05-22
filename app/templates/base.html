@@ -1,0 +1,54 @@
+<!-- app/templates/base.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DClinPsy Viva Examiner matching dashboard</title>
+    <link rel="stylesheet" href="/static/index.css">
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+</head>
+<body>
+    <div class="app-container">
+        <header>
+            <div>
+                <h1>DClinPsy Thesis allocations</h1>
+                <div class="subtitle">PostgreSQL-backed OR-Tools SAT solver pipeline</div>
+            </div>
+            <div id="db-status-badge">
+                <span class="badge badge-success">PostgreSQL Online</span>
+            </div>
+        </header>
+
+        <nav class="tabs-nav">
+            <a href="/import" class="tab-btn {% if active_tab == 'import' %}active{% endif %}" style="display: inline-flex; align-items: center; justify-content: center; gap: 8px;">
+                Data Import
+                <span hx-get="/import/verification-count" hx-trigger="load, refreshVerificationCount from:body" hx-swap="innerHTML"></span>
+            </a>
+            <a href="/constraints" class="tab-btn {% if active_tab == 'constraints' %}active{% endif %}">
+                Constraint Editing
+            </a>
+            <a href="/person-data" class="tab-btn {% if active_tab == 'person-data' %}active{% endif %}">
+                Person Data
+            </a>
+            <a href="/matching" class="tab-btn {% if active_tab == 'matching' %}active{% endif %}">
+                Matching & Diagnostics
+            </a>
+            <a href="/mail-merge" class="tab-btn {% if active_tab == 'mail-merge' %}active{% endif %}">
+                Mail Merge Setup
+            </a>
+        </nav>
+
+        <main id="tab-content">
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+    
+    <script>
+        // Custom JS for dynamic UX enhancers if needed
+        document.body.addEventListener('htmx:afterRequest', function(evt) {
+            // Clean up files or run custom animations after requests
+        });
+    </script>
+</body>
+</html>

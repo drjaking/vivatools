@@ -1,0 +1,449 @@
+<!-- app/templates/verification_dashboard.html -->
+<style>
+    .verification-section {
+        margin-top: 15px;
+    }
+    .verification-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 0;
+        font-size: 0.82rem;
+    }
+    .verification-table th, .verification-table td {
+        padding: 8px 10px;
+        text-align: left;
+        border-bottom: 1px solid var(--border);
+    }
+    .verification-table th {
+        font-weight: 600;
+        color: var(--text-secondary);
+        background-color: rgba(255, 255, 255, 0.02);
+        position: sticky;
+        top: 0;
+        z-index: 5;
+    }
+    .verification-table tr:hover {
+        background-color: rgba(255, 255, 255, 0.01);
+    }
+    .select-sm {
+        background-color: var(--bg-primary);
+        border: 1px solid var(--border);
+        color: var(--text-primary);
+        border-radius: var(--radius-sm);
+        padding: 4px 6px;
+        font-size: 0.78rem;
+        width: 100%;
+        max-width: 220px;
+        outline: none;
+    }
+    .select-sm:focus {
+        border-color: var(--accent);
+    }
+    .btn-icon {
+        background: none;
+        border: none;
+        cursor: pointer;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 1rem;
+        transition: var(--transition);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .btn-icon-confirm {
+        color: var(--success);
+        background-color: rgba(16, 185, 129, 0.1);
+    }
+    .btn-icon-confirm:hover {
+        background-color: rgba(16, 185, 129, 0.25);
+    }
+    .btn-icon-reject {
+        color: var(--danger);
+        background-color: rgba(239, 68, 68, 0.1);
+    }
+    .btn-icon-reject:hover {
+        background-color: rgba(239, 68, 68, 0.25);
+    }
+    tr.htmx-swapping {
+        opacity: 0;
+        transform: scaleY(0);
+        transition: all 0.3s ease-out;
+    }
+    .tabs-sub {
+        display: flex;
+        gap: 16px;
+        border-bottom: 1px solid var(--border);
+        margin-bottom: 12px;
+    }
+    .tab-sub-btn {
+        background: none;
+        border: none;
+        color: var(--text-secondary);
+        padding: 6px 4px;
+        font-size: 0.85rem;
+        font-weight: 500;
+        cursor: pointer;
+        border-bottom: 2px solid transparent;
+        transition: var(--transition);
+    }
+    .tab-sub-btn.active {
+        color: var(--accent);
+        border-bottom-color: var(--accent);
+    }
+</style>
+
+{% macro render_verification_table(items, type, examiners, students) %}
+<table class="verification-table">
+    <thead>
+        <tr>
+            <th>Student</th>
+            <th>Survey Value</th>
+            <th>Resolution / Suggestions</th>
+            <th style="width: 70px; text-align: center;">Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for item in items %}
+        <tr id="row-{{ item.mapping_id }}">
+            <td style="font-weight: 500;">{{ item.student_name }}</td>
+            <td style="color: var(--text-secondary); font-style: italic;">{{ item.raw_name }}</td>
+            <td>
+                <form id="form-{{ item.mapping_id }}">
+                    <input type="hidden" name="mapping_id" value="{{ item.mapping_id }}">
+                    <div style="display: flex; flex-direction: column; gap: 4px;">
+                        {% if type == 'supervisor' %}
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            <select name="selected_id" class="select-sm" 
+                                    hx-post="/import/verification/update-suggestion"
+                                    hx-vals='{"mapping_id": "{{ item.mapping_id }}"}'
+                                    hx-trigger="change"
+                                    hx-swap="none">
+                                <option value="">-- None / External Supervisor --</option>
+                                {% for ex in examiners %}
+                                <option value="{{ ex.id }}" {% if item.suggested_id == ex.id %}selected{% endif %}>
+                                    {{ ex.name }} ({{ ex.type }})
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 6px; margin-top: 2px;">
+                            <span style="font-size: 0.7rem; color: var(--text-secondary);">Add new:</span>
+                            <button type="button"
+                                    hx-post="/import/verification/create-examiner"
+                                    hx-vals='{"mapping_id": "{{ item.mapping_id }}", "examiner_type": "external"}'
+                                    hx-target="#verification-card"
+                                    class="btn btn-secondary btn-sm"
+                                    style="padding: 1px 5px; font-size: 0.65rem; background-color: var(--bg-tertiary); border: 1px solid var(--border);"
+                                    title="Add as External Examiner">
+                                + External
+                            </button>
+                            <button type="button"
+                                    hx-post="/import/verification/create-examiner"
+                                    hx-vals='{"mapping_id": "{{ item.mapping_id }}", "examiner_type": "internal"}'
+                                    hx-target="#verification-card"
+                                    class="btn btn-secondary btn-sm"
+                                    style="padding: 1px 5px; font-size: 0.65rem; background-color: var(--bg-tertiary); border: 1px solid var(--border);"
+                                    title="Add as Internal Examiner">
+                                + Internal
+                            </button>
+                        </div>
+                        <div style="font-size: 0.65rem; color: var(--warning); margin-top: 2px; max-width: 220px; line-height: 1.1;">
+                            ⚠️ No category endorsements will be set. Re-import a competence spreadsheet to populate.
+                        </div>
+                        {% else %}
+                        <select name="selected_id" class="select-sm"
+                                hx-post="/import/verification/update-suggestion"
+                                hx-vals='{"mapping_id": "{{ item.mapping_id }}"}'
+                                hx-trigger="change"
+                                hx-swap="none">
+                            <option value="">-- No Partner / Unpaired --</option>
+                            {% for s in students %}
+                            <option value="{{ s.id }}" {% if item.suggested_id == s.id %}selected{% endif %}>
+                                {{ s.name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        {% endif %}
+                    </div>
+                </form>
+            </td>
+            <td>
+                <div style="display: flex; gap: 8px; justify-content: center;">
+                    <button hx-post="/import/verification/confirm"
+                            hx-include="#form-{{ item.mapping_id }}"
+                            hx-target="#row-{{ item.mapping_id }}"
+                            hx-swap="delete"
+                            class="btn-icon btn-icon-confirm"
+                            title="Confirm mapping">
+                        ✓
+                    </button>
+                    <button hx-post="/import/verification/reject"
+                            hx-vals='{"mapping_id": "{{ item.mapping_id }}"}'
+                            hx-target="#row-{{ item.mapping_id }}"
+                            hx-swap="delete"
+                            class="btn-icon btn-icon-reject"
+                            title="Reject / Ignore mapping">
+                        ✗
+                    </button>
+                </div>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endmacro %}
+
+<div class="card-title" style="margin-bottom: 8px;">
+    <span>Pending Mappings Verification</span>
+    {% if total_pending > 0 %}
+    <span class="badge badge-warning" id="pending-count-badge">{{ total_pending }} action{{ 's' if total_pending > 1 else '' }}</span>
+    {% endif %}
+</div>
+
+{% if total_pending == 0 %}
+<div style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 30px 10px; text-align: center;">
+    <span style="font-size: 2.5rem; margin-bottom: 10px;">🎉</span>
+    <div style="font-weight: 600; color: var(--success); font-size: 1rem; margin-bottom: 4px;">All Ingested Mappings Resolved!</div>
+    <div style="font-size: 0.8rem; color: var(--text-secondary); max-width: 320px;">
+        All supervisor conflict bans and partner pairings have been confirmed and established in the database constraints.
+    </div>
+</div>
+{% else %}
+<p class="subtitle" style="margin-bottom: 15px; font-size: 0.8rem;">
+    Review mappings found in the Qualtrics thesis characteristics upload. Confirm correct suggestions, reject/ignore mismatches, or create new examiners.
+</p>
+
+<!-- Verification Alert / Errors Box -->
+<div id="verification-error" style="margin-bottom: 10px;">
+    {% if errors %}
+    <div class="alert alert-danger" style="margin: 10px 0; padding: 10px; font-size: 0.85rem; border-radius: var(--radius-sm);">
+        <strong>Some matches could not be confirmed:</strong>
+        <ul style="margin: 5px 0 0 15px; padding: 0;">
+            {% for err in errors %}
+            <li>{{ err }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+</div>
+
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; gap: 10px; border-bottom: 1px solid var(--border); padding-bottom: 8px;">
+    <div class="tabs-sub" style="margin-bottom: 0; border: none;">
+        <button type="button" class="tab-sub-btn {% if active_tab == 'supervisor' %}active{% endif %}" onclick="switchVerTab('supervisor-ver-section', this, 'supervisor')">
+            Supervisors ({{ total_pending_supervisors }})
+        </button>
+        <button type="button" class="tab-sub-btn {% if active_tab == 'partner' %}active{% endif %}" onclick="switchVerTab('partner-ver-section', this, 'partner')">
+            Partners ({{ total_pending_partners }})
+        </button>
+    </div>
+</div>
+
+<!-- Tab 1: Supervisors -->
+<div id="supervisor-ver-section" class="verification-section" style="display: {% if active_tab == 'supervisor' %}block{% else %}none{% endif %};">
+    {% if total_pending_supervisors == 0 %}
+    <div style="padding: 20px; text-align: center; color: var(--text-secondary); font-size: 0.8rem; border: 1px dashed var(--border); border-radius: var(--radius-sm);">
+        No pending supervisor mappings to verify.
+    </div>
+    {% else %}
+        <!-- Exact matches subsection -->
+        <div style="margin-bottom: 24px; background: rgba(255, 255, 255, 0.01); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
+                <div style="font-size: 0.85rem; font-weight: 600; color: var(--success); display: flex; align-items: center; gap: 6px;">
+                    <span style="background-color: rgba(16, 185, 129, 0.15); padding: 2px 6px; border-radius: 4px; font-size: 0.65rem; text-transform: uppercase;">Exact</span>
+                    <span>Exact Matches ({{ exact_sups|length }})</span>
+                </div>
+                {% if exact_sups|length > 0 %}
+                <button hx-post="/import/verification/confirm-all-exact" 
+                        hx-vals='{"relationship_type": "supervisor"}'
+                        hx-target="#verification-card" 
+                        class="btn btn-secondary btn-sm" 
+                        style="padding: 3px 6px; font-size: 0.7rem; border-color: var(--success); color: var(--success); background: none;">
+                    Confirm All Exact
+                </button>
+                {% endif %}
+            </div>
+            {% if exact_sups|length > 0 %}
+            <div style="max-height: 200px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius-sm);">
+                {{ render_verification_table(exact_sups, 'supervisor', examiners, students) }}
+            </div>
+            {% else %}
+            <div style="font-size: 0.75rem; color: var(--text-secondary); font-style: italic;">No pending exact supervisor matches.</div>
+            {% endif %}
+        </div>
+
+        <!-- Fuzzy matches subsection -->
+        <div style="margin-bottom: 24px; background: rgba(255, 255, 255, 0.01); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
+                <div style="font-size: 0.85rem; font-weight: 600; color: var(--warning); display: flex; align-items: center; gap: 6px;">
+                    <span style="background-color: rgba(245, 158, 11, 0.15); padding: 2px 6px; border-radius: 4px; font-size: 0.65rem; text-transform: uppercase;">Fuzzy</span>
+                    <span>Fuzzy Matches ({{ fuzzy_sups|length }})</span>
+                </div>
+                {% if fuzzy_sups|length > 0 %}
+                <button hx-post="/import/verification/confirm-all-fuzzy" 
+                        hx-vals='{"relationship_type": "supervisor"}'
+                        hx-target="#verification-card" 
+                        class="btn btn-secondary btn-sm" 
+                        style="padding: 3px 6px; font-size: 0.7rem; border-color: var(--warning); color: var(--warning); background: none;">
+                    Confirm All Fuzzy
+                </button>
+                {% endif %}
+            </div>
+            {% if fuzzy_sups|length > 0 %}
+            <div style="max-height: 200px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius-sm);">
+                {{ render_verification_table(fuzzy_sups, 'supervisor', examiners, students) }}
+            </div>
+            {% else %}
+            <div style="font-size: 0.75rem; color: var(--text-secondary); font-style: italic;">No pending fuzzy supervisor matches.</div>
+            {% endif %}
+        </div>
+
+        <!-- No matches subsection -->
+        <div style="background: rgba(255, 255, 255, 0.01); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
+                <div style="font-size: 0.85rem; font-weight: 600; color: var(--text-secondary); display: flex; align-items: center; gap: 6px;">
+                    <span style="background-color: rgba(156, 163, 175, 0.15); padding: 2px 6px; border-radius: 4px; font-size: 0.65rem; text-transform: uppercase;">No Match</span>
+                    <span>No Matches ({{ none_sups|length }})</span>
+                </div>
+                {% if none_sups|length > 0 %}
+                <button hx-post="/import/verification/confirm-all-no-match" 
+                        hx-vals='{"relationship_type": "supervisor"}'
+                        hx-target="#verification-card" 
+                        class="btn btn-secondary btn-sm" 
+                        style="padding: 3px 6px; font-size: 0.7rem; border-color: var(--text-secondary); color: var(--text-secondary); background: none;">
+                    Ignore All No Matches
+                </button>
+                {% endif %}
+            </div>
+            {% if none_sups|length > 0 %}
+            <div style="max-height: 200px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius-sm);">
+                {{ render_verification_table(none_sups, 'supervisor', examiners, students) }}
+            </div>
+            {% else %}
+            <div style="font-size: 0.75rem; color: var(--text-secondary); font-style: italic;">No pending unmatched supervisor items.</div>
+            {% endif %}
+        </div>
+    {% endif %}
+</div>
+
+<!-- Tab 2: Partners -->
+<div id="partner-ver-section" class="verification-section" style="display: {% if active_tab == 'partner' %}block{% else %}none{% endif %};">
+    {% if total_pending_partners == 0 %}
+    <div style="padding: 20px; text-align: center; color: var(--text-secondary); font-size: 0.8rem; border: 1px dashed var(--border); border-radius: var(--radius-sm);">
+        No pending partner mappings to verify.
+    </div>
+    {% else %}
+        <!-- Exact matches subsection -->
+        <div style="margin-bottom: 24px; background: rgba(255, 255, 255, 0.01); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
+                <div style="font-size: 0.85rem; font-weight: 600; color: var(--success); display: flex; align-items: center; gap: 6px;">
+                    <span style="background-color: rgba(16, 185, 129, 0.15); padding: 2px 6px; border-radius: 4px; font-size: 0.65rem; text-transform: uppercase;">Exact</span>
+                    <span>Exact Matches ({{ exact_parts|length }})</span>
+                </div>
+                {% if exact_parts|length > 0 %}
+                <button hx-post="/import/verification/confirm-all-exact" 
+                        hx-vals='{"relationship_type": "partner"}'
+                        hx-target="#verification-card" 
+                        class="btn btn-secondary btn-sm" 
+                        style="padding: 3px 6px; font-size: 0.7rem; border-color: var(--success); color: var(--success); background: none;">
+                    Confirm All Exact
+                </button>
+                {% endif %}
+            </div>
+            {% if exact_parts|length > 0 %}
+            <div style="max-height: 200px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius-sm);">
+                {{ render_verification_table(exact_parts, 'partner', examiners, students) }}
+            </div>
+            {% else %}
+            <div style="font-size: 0.75rem; color: var(--text-secondary); font-style: italic;">No pending exact partner matches.</div>
+            {% endif %}
+        </div>
+
+        <!-- Fuzzy matches subsection -->
+        <div style="margin-bottom: 24px; background: rgba(255, 255, 255, 0.01); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
+                <div style="font-size: 0.85rem; font-weight: 600; color: var(--warning); display: flex; align-items: center; gap: 6px;">
+                    <span style="background-color: rgba(245, 158, 11, 0.15); padding: 2px 6px; border-radius: 4px; font-size: 0.65rem; text-transform: uppercase;">Fuzzy</span>
+                    <span>Fuzzy Matches ({{ fuzzy_parts|length }})</span>
+                </div>
+                {% if fuzzy_parts|length > 0 %}
+                <button hx-post="/import/verification/confirm-all-fuzzy" 
+                        hx-vals='{"relationship_type": "partner"}'
+                        hx-target="#verification-card" 
+                        class="btn btn-secondary btn-sm" 
+                        style="padding: 3px 6px; font-size: 0.7rem; border-color: var(--warning); color: var(--warning); background: none;">
+                    Confirm All Fuzzy
+                </button>
+                {% endif %}
+            </div>
+            {% if fuzzy_parts|length > 0 %}
+            <div style="max-height: 200px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius-sm);">
+                {{ render_verification_table(fuzzy_parts, 'partner', examiners, students) }}
+            </div>
+            {% else %}
+            <div style="font-size: 0.75rem; color: var(--text-secondary); font-style: italic;">No pending fuzzy partner matches.</div>
+            {% endif %}
+        </div>
+
+        <!-- No matches subsection -->
+        <div style="background: rgba(255, 255, 255, 0.01); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
+                <div style="font-size: 0.85rem; font-weight: 600; color: var(--text-secondary); display: flex; align-items: center; gap: 6px;">
+                    <span style="background-color: rgba(156, 163, 175, 0.15); padding: 2px 6px; border-radius: 4px; font-size: 0.65rem; text-transform: uppercase;">No Match</span>
+                    <span>No Matches ({{ none_parts|length }})</span>
+                </div>
+                {% if none_parts|length > 0 %}
+                <button hx-post="/import/verification/confirm-all-no-match" 
+                        hx-vals='{"relationship_type": "partner"}'
+                        hx-target="#verification-card" 
+                        class="btn btn-secondary btn-sm" 
+                        style="padding: 3px 6px; font-size: 0.7rem; border-color: var(--text-secondary); color: var(--text-secondary); background: none;">
+                    Ignore All No Matches
+                </button>
+                {% endif %}
+            </div>
+            {% if none_parts|length > 0 %}
+            <div style="max-height: 200px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius-sm);">
+                {{ render_verification_table(none_parts, 'partner', examiners, students) }}
+            </div>
+            {% else %}
+            <div style="font-size: 0.75rem; color: var(--text-secondary); font-style: italic;">No pending unmatched partner items.</div>
+            {% endif %}
+        </div>
+    {% endif %}
+</div>
+
+<script>
+    function switchVerTab(sectionId, btn, tabName) {
+        // Hide all sections
+        document.querySelectorAll('.verification-section').forEach(function(sec) {
+            sec.style.display = 'none';
+        });
+        // Deactivate all sub tabs
+        document.querySelectorAll('.tab-sub-btn').forEach(function(b) {
+            b.classList.remove('active');
+        });
+        
+        // Show target and activate button
+        const targetSec = document.getElementById(sectionId);
+        if (targetSec) {
+            targetSec.style.display = 'block';
+        }
+        btn.classList.add('active');
+
+        // Update verification-card hx-get attribute to preserve tab on reload
+        const card = document.getElementById('verification-card');
+        if (card) {
+            card.setAttribute('hx-get', `/import/verification-dashboard?active_tab=${tabName}`);
+        }
+    }
+
+    // Initialize verification-card hx-get to include active tab
+    (function() {
+        const card = document.getElementById('verification-card');
+        if (card) {
+            card.setAttribute('hx-get', `/import/verification-dashboard?active_tab={{ active_tab }}`);
+        }
+    })();
+</script>
+{% endif %}

@@ -1,0 +1,94 @@
+<!-- app/templates/person_data_tab.html -->
+{% extends "base.html" %}
+
+{% block content %}
+<div class="grid-2" style="grid-template-columns: 55% 45%;">
+    <!-- Left Column: Search & Lists -->
+    <div class="card" style="margin-bottom: 0; min-height: calc(100vh - 200px); display: flex; flex-direction: column;">
+        <div class="card-title">Manage Database Records</div>
+        
+        <!-- Toggle Pill Switcher -->
+        <div style="display: flex; gap: 8px; margin-bottom: 16px; background-color: var(--bg-primary); padding: 4px; border-radius: var(--radius-sm); border: 1px solid var(--border);">
+            <button class="btn btn-primary btn-sm" id="sub-tab-students" onclick="switchSubTab('students')" style="flex: 1; border-radius: calc(var(--radius-sm) - 2px); transition: var(--transition);">
+                Students
+            </button>
+            <button class="btn btn-secondary btn-sm" id="sub-tab-examiners" onclick="switchSubTab('examiners')" style="flex: 1; border-radius: calc(var(--radius-sm) - 2px); transition: var(--transition);">
+                Examiners
+            </button>
+        </div>
+
+        <input type="hidden" name="type" id="person-type" value="students">
+        
+        <!-- Search bar -->
+        <div style="margin-bottom: 16px;">
+            <input type="text" 
+                   id="search-input" 
+                   name="search" 
+                   placeholder="Search students by name, project title..." 
+                   hx-get="/person-data/list" 
+                   hx-trigger="keyup changed delay:200ms, search, load" 
+                   hx-target="#list-container" 
+                   hx-include="#person-type"
+                   style="width: 100%; padding: 10px 14px; background-color: var(--bg-primary); border: 1px solid var(--border);">
+        </div>
+
+        <!-- Table Container -->
+        <div id="list-container" style="flex: 1; overflow-y: auto; max-height: calc(100vh - 350px);">
+            <!-- HTMX swaps list fragment here -->
+            <div style="padding: 40px; text-align: center;">
+                <span class="spinner"></span> Loading list...
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column: Detail & Edit Form -->
+    <div id="edit-panel" style="position: sticky; top: 24px;">
+        <div class="card" style="margin-bottom: 0;">
+            <div style="padding: 40px 20px; text-align: center; color: var(--text-muted); border: 1px dashed var(--border); border-radius: var(--radius-md); background-color: rgba(255,255,255,0.01);">
+                <div style="font-size: 2rem; margin-bottom: 12px;">👤</div>
+                <div style="font-weight: 500; color: var(--text-secondary);">No Person Selected</div>
+                <p style="font-size: 0.85rem; margin-top: 4px;">Click any row on the left to view and edit details.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function switchSubTab(type) {
+        document.getElementById('person-type').value = type;
+        const btnStudents = document.getElementById('sub-tab-students');
+        const btnExaminers = document.getElementById('sub-tab-examiners');
+        const searchInput = document.getElementById('search-input');
+        
+        if (type === 'students') {
+            btnStudents.className = "btn btn-primary btn-sm";
+            btnExaminers.className = "btn btn-secondary btn-sm";
+            searchInput.placeholder = "Search students by name, project title...";
+        } else {
+            btnStudents.className = "btn btn-secondary btn-sm";
+            btnExaminers.className = "btn btn-primary btn-sm";
+            searchInput.placeholder = "Search examiners by name...";
+        }
+        
+        searchInput.value = "";
+        // Trigger HTMX reload
+        htmx.trigger('#search-input', 'search');
+        
+        // Reset details panel to default message
+        document.getElementById('edit-panel').innerHTML = `
+            <div class="card" style="margin-bottom: 0;">
+                <div style="padding: 40px 20px; text-align: center; color: var(--text-muted); border: 1px dashed var(--border); border-radius: var(--radius-md); background-color: rgba(255,255,255,0.01);">
+                    <div style="font-size: 2rem; margin-bottom: 12px;">👤</div>
+                    <div style="font-weight: 500; color: var(--text-secondary);">No Person Selected</div>
+                    <p style="font-size: 0.85rem; margin-top: 4px;">Click any row on the left to view and edit details.</p>
+                </div>
+            </div>
+        `;
+    }
+
+    // Event listener for post-request refresh handling if list updates are triggered
+    document.body.addEventListener('refreshList', function() {
+        htmx.trigger('#search-input', 'search');
+    });
+</script>
+{% endblock %}

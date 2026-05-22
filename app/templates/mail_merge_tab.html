@@ -1,0 +1,125 @@
+<!-- app/templates/mail_merge_tab.html -->
+{% extends "base.html" %}
+
+{% block content %}
+<div class="grid-2">
+    <!-- Left Column: Settings and Controls -->
+    <div>
+        <!-- Card 1: Configuration Paths -->
+        <div class="card">
+            <div class="card-title">Word Mail-Merge Templates</div>
+            <p class="subtitle" style="margin-bottom: 20px;">
+                Verify the file system paths to the DOCX mail-merge templates.
+            </p>
+            
+            <form hx-post="/mail-merge/save-paths" hx-target="#paths-result">
+                <div class="form-group">
+                    <label>Trainee Initial Template (.docx)</label>
+                    <input type="text" name="path_trainee" value="{{ paths.path_trainee or 'templates/Trainee_Initial_Email.docx' }}">
+                </div>
+                <div class="form-group">
+                    <label>Internal Examiner Invite Template (.docx)</label>
+                    <input type="text" name="path_internal" value="{{ paths.path_internal or 'templates/Internal_Examiner_Initial_Email.docx' }}">
+                </div>
+                <div class="form-group">
+                    <label>Triad Confirmation Template (.docx)</label>
+                    <input type="text" name="path_triad" value="{{ paths.path_triad or 'templates/External_Examiner_Initial_Email.docx' }}">
+                </div>
+                <button type="submit" class="btn btn-primary btn-sm">Save Template Paths</button>
+                <div id="paths-result" style="margin-top: 10px;"></div>
+            </form>
+        </div>
+
+        <!-- Card 2: Outlook Integration Actions -->
+        <div class="card">
+            <div class="card-title">Initiate Outlook Mail-Merge</div>
+            <p class="subtitle" style="margin-bottom: 16px;">
+                Generate draft emails in Outlook. These will be created in your Outlook Drafts folder for review before sending.
+            </p>
+            
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px; background-color: rgba(255,255,255,0.02); border-radius: var(--radius-sm); border: 1px solid var(--border);">
+                    <div>
+                        <strong style="display: block; font-size: 0.95rem;">1. Trainee Initial Emails</strong>
+                        <span style="font-size: 0.8rem; color: var(--text-secondary);">Sends initial info to non-deferred trainees.</span>
+                    </div>
+                    <button hx-post="/mail-merge/run/trainee" hx-target="#merge-console" hx-indicator="#merge-indicator" class="btn btn-secondary btn-sm">
+                        Create Drafts
+                    </button>
+                </div>
+
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px; background-color: rgba(255,255,255,0.02); border-radius: var(--radius-sm); border: 1px solid var(--border);">
+                    <div>
+                        <strong style="display: block; font-size: 0.95rem;">2. Internal Examiner Invites</strong>
+                        <span style="font-size: 0.8rem; color: var(--text-secondary);">Sends invite to assigned internal examiners.</span>
+                    </div>
+                    <button hx-post="/mail-merge/run/internal" hx-target="#merge-console" hx-indicator="#merge-indicator" class="btn btn-secondary btn-sm">
+                        Create Drafts
+                    </button>
+                </div>
+
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px; background-color: rgba(255,255,255,0.02); border-radius: var(--radius-sm); border: 1px solid var(--border);">
+                    <div>
+                        <strong style="display: block; font-size: 0.95rem;">3. Triad Confirmations</strong>
+                        <span style="font-size: 0.8rem; color: var(--text-secondary);">Sends confirmation to trainee + internal + external examiners.</span>
+                    </div>
+                    <button hx-post="/mail-merge/run/triad" hx-target="#merge-console" hx-indicator="#merge-indicator" class="btn btn-secondary btn-sm">
+                        Create Drafts
+                    </button>
+                </div>
+            </div>
+            
+            <div style="margin-top: 16px; display: flex; align-items: center; gap: 8px;">
+                <span id="merge-indicator" class="htmx-indicator">
+                    <span class="spinner"></span> Running Outlook Mail-Merge script... (Make sure Outlook is open)
+                </span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column: Previews and Diagnostics -->
+    <div>
+        <!-- Card 3: Draft Previews -->
+        <div class="card">
+            <div class="card-title">Live Merge Preview</div>
+            <p class="subtitle" style="margin-bottom: 16px;">
+                Select a student to preview the generated mail-merge email drafts.
+            </p>
+            
+            <div class="form-group">
+                <label>Select Student to Preview</label>
+                <select name="student_id" 
+                        hx-post="/mail-merge/preview" 
+                        hx-trigger="change" 
+                        hx-target="#preview-content-box"
+                        hx-indicator="#preview-indicator">
+                    <option value="">-- Choose Student --</option>
+                    {% for st in students %}
+                    <option value="{{ st.student_id }}">{{ st.full_name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <div style="display: flex; align-items: center; margin-bottom: 8px; gap: 8px;">
+                <span id="preview-indicator" class="htmx-indicator">
+                    <span class="spinner"></span> Merging Template...
+                </span>
+            </div>
+            
+            <div id="preview-content-box" style="border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 16px; background-color: var(--bg-primary); min-height: 250px; font-size: 0.9rem; overflow-y: auto;">
+                <div style="text-align: center; color: var(--text-muted); margin-top: 80px;">
+                    Select a student from the dropdown above to render a live email merge preview.
+                </div>
+            </div>
+        </div>
+        
+        <!-- Card 4: Console Output -->
+        <div class="card">
+            <div class="card-title">Mail-Merge Output Log</div>
+            <div id="merge-console" class="log-box" style="height: 180px;">
+Console idle. Click 'Create Drafts' to launch Outlook integration.
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

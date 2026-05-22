@@ -1,0 +1,151 @@
+<!-- app/templates/import_tab.html -->
+{% extends "base.html" %}
+
+{% block content %}
+<div class="grid-2">
+    <!-- Card 1: Main Survey Spreadsheet Upload -->
+    <div class="card">
+        <div class="card-title">
+            <span>Primary Ingestion: Competences & Theses</span>
+            <span class="badge badge-warning">Dry-Run Validation Required</span>
+        </div>
+        <p class="subtitle" style="margin-bottom: 20px;">
+            Upload the three primary surveys from the examiners and trainees to initialize matching properties.
+        </p>
+        
+        <form hx-post="/import/validate-survey" hx-encoding="multipart/form-data" hx-target="#survey-validation-result" hx-indicator="#survey-indicator">
+            <div class="form-group">
+                <label>Internal Competences Excel (.xlsx)</label>
+                <div class="upload-zone">
+                    <span class="upload-icon">📥</span>
+                    <div class="upload-text">Select or drag Internal Excel file</div>
+                    <div class="upload-subtext">First column: 'examiner'</div>
+                    <input type="file" name="file_internal" required>
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label>External Competences Excel (.xlsx)</label>
+                <div class="upload-zone">
+                    <span class="upload-icon">📥</span>
+                    <div class="upload-text">Select or drag External Excel file</div>
+                    <div class="upload-subtext">First column: 'examiner'</div>
+                    <input type="file" name="file_external" required>
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label>Thesis Characteristics Excel (.xlsx)</label>
+                <div class="upload-zone">
+                    <span class="upload-icon">📥</span>
+                    <div class="upload-text">Select or drag Thesis Excel file</div>
+                    <div class="upload-subtext">First column: 'student'</div>
+                    <input type="file" name="file_thesis" required>
+                </div>
+            </div>
+            
+            <div style="display: flex; gap: 12px; align-items: center;">
+                <button type="submit" class="btn btn-primary">
+                    Verify Spreadsheets
+                </button>
+                <span id="survey-indicator" class="htmx-indicator">
+                    <span class="spinner"></span> Validating...
+                </span>
+            </div>
+        </form>
+        
+        <div id="survey-validation-result" style="margin-top: 20px;">
+            <!-- Result of dry-run validation will be injected here -->
+        </div>
+    </div>
+
+    <!-- Right Side Panel: Other Ingestions & Verification -->
+    <div>
+        <!-- Card 2: Interactive Verification Dashboard -->
+        <div class="card" id="verification-card" hx-get="/import/verification-dashboard" hx-trigger="load, refreshVerificationCount from:body">
+            <div class="card-title">Pending Mappings Verification</div>
+            <div style="display: flex; align-items: center; justify-content: center; padding: 40px; color: var(--text-secondary);">
+                <span class="spinner" style="margin-right: 10px;"></span> Loading pending verification mappings...
+            </div>
+        </div>
+
+        <!-- Card 3: Competence Re-Import -->
+        <div class="card" style="border: 1px solid rgba(56, 189, 248, 0.25); background-color: rgba(56, 189, 248, 0.02);">
+            <div class="card-title" style="color: #38bdf8;">
+                <span>Competence Re-Import</span>
+                <span class="badge" style="background-color: rgba(56, 189, 248, 0.15); color: #38bdf8; font-size: 0.7rem;">Additive</span>
+            </div>
+            <p class="subtitle" style="margin-bottom: 16px;">
+                Re-upload updated Internal and External competence spreadsheets to add new examiners or refresh existing competence endorsements.
+                This does <strong>not</strong> modify students, thesis categories, bans, groups, or assignments.
+                Any previously unresolved supervisor mappings will be automatically re-matched against the updated examiner list.
+            </p>
+            <form hx-post="/import/update-competences" hx-encoding="multipart/form-data" hx-target="#competence-reimport-result" hx-indicator="#comp-reimport-indicator">
+                <div class="form-group" style="margin-bottom: 10px;">
+                    <label style="font-size: 0.82rem; font-weight: 500;">Internal Competences Excel (.xlsx)</label>
+                    <div class="upload-zone" style="padding: 10px;">
+                        <span class="upload-icon" style="font-size: 1.2rem;">📥</span>
+                        <div class="upload-text" style="font-size: 0.8rem;">Select Internal Excel file</div>
+                        <input type="file" name="file_internal">
+                    </div>
+                </div>
+                <div class="form-group" style="margin-bottom: 12px;">
+                    <label style="font-size: 0.82rem; font-weight: 500;">External Competences Excel (.xlsx)</label>
+                    <div class="upload-zone" style="padding: 10px;">
+                        <span class="upload-icon" style="font-size: 1.2rem;">📥</span>
+                        <div class="upload-text" style="font-size: 0.8rem;">Select External Excel file</div>
+                        <input type="file" name="file_external">
+                    </div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <button type="submit" class="btn btn-secondary btn-sm" style="border-color: #38bdf8; color: #38bdf8;">
+                        Update Competences
+                    </button>
+                    <span id="comp-reimport-indicator" class="htmx-indicator">
+                        <span class="spinner"></span> Importing...
+                    </span>
+                </div>
+            </form>
+            <div id="competence-reimport-result" style="margin-top: 15px;"></div>
+        </div>
+
+        <!-- Card 4: Outlook Contacts Export -->
+        <div class="card">
+            <div class="card-title">Contacts Template Exporter</div>
+            <p class="subtitle" style="margin-bottom: 16px;">
+                Export students and examiners database lists into CSV template files. If Outlook is available, email fields will automatically attempt lookup in Contacts and the Global Address List (GAL).
+            </p>
+            <button hx-post="/import/export-templates" hx-target="#export-result" hx-indicator="#exp-indicator" class="btn btn-secondary btn-sm">
+                Generate & Export Contact CSVs
+            </button>
+            <span id="exp-indicator" class="htmx-indicator" style="margin-left: 10px;">
+                <span class="spinner"></span> Running Export...
+            </span>
+            <div id="export-result" style="margin-top: 15px;"></div>
+        </div>
+
+        <!-- Card 4: Danger Zone -->
+        <div class="card" style="border: 1px solid rgba(220, 53, 69, 0.4); background-color: rgba(220, 53, 69, 0.02);">
+            <div class="card-title" style="color: #ff6b6b;">Danger Zone</div>
+            <p class="subtitle" style="margin-bottom: 16px; color: var(--text-secondary);">
+                Reset the database back to a clean slate. This will clear all students, examiners, competences, supervisor mappings, project groups, and assignments.
+            </p>
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <button hx-post="/import/reset-db" 
+                        hx-confirm="ARE YOU ABSOLUTELY SURE you want to clear all tables in the database? This cannot be undone." 
+                        hx-target="#reset-db-result" 
+                        hx-indicator="#reset-indicator" 
+                        hx-on:htmx:after-request="if(event.detail.successful) window.location.reload()"
+                        class="btn btn-danger btn-sm" 
+                        style="background-color: #dc3545; border-color: #dc3545; color: white;">
+                    Reset Database
+                </button>
+                <span id="reset-indicator" class="htmx-indicator">
+                    <span class="spinner"></span> Resetting...
+                </span>
+            </div>
+            <div id="reset-db-result" style="margin-top: 12px;"></div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,341 @@
+<!-- app/templates/constraints_tab.html -->
+{% extends "base.html" %}
+
+{% block content %}
+<!-- Tab 2: Constraint Editing Dashboard -->
+<div class="grid-2">
+    <!-- Left Column: Weights and Limits -->
+    <div>
+        <!-- Card 1: Competence Weights -->
+        <div class="card">
+            <div class="card-title">Default Weights per Competence</div>
+            <p class="subtitle" style="margin-bottom: 16px;">
+                Specify the default penalty weight for mismatching student requirements against examiner competences.
+            </p>
+            <form hx-post="/constraints/save-weights" hx-target="#weights-result">
+                <div style="max-height: 400px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); margin-bottom: 16px;">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Competence (Category)</th>
+                                <th>Default Weight</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for cat in categories %}
+                            <tr>
+                                <td>{{ cat.name }}</td>
+                                <td style="width: 120px;">
+                                    <input type="number" step="0.01" name="weight_{{ cat.id }}" value="{{ cat.default_weight }}" style="padding: 4px 8px;">
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <button type="submit" class="btn btn-primary btn-sm">Save Default Weights</button>
+                <div id="weights-result" style="margin-top: 10px;"></div>
+            </form>
+        </div>
+
+        <!-- Card 2: Workload Limits -->
+        <div class="card">
+            <div class="card-title">Examiner Workload Limits</div>
+            <p class="subtitle" style="margin-bottom: 16px;">
+                Configure the maximum number of viva assignments for each examiner. Examiners with limit 0 are ignored or have no allocations.
+            </p>
+            
+            <form hx-post="/constraints/save-limits" hx-target="#limits-result">
+                <div class="workloads-container" style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+                    <!-- Internal Examiners Table -->
+                    <div>
+                        <h4 style="margin: 0 0 8px 0; font-size: 0.85rem; color: var(--accent-color); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Internal Examiners</h4>
+                        <div style="max-height: 350px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); background-color: var(--bg-primary);">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Examiner</th>
+                                        <th style="width: 100px;">Limit N</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for ex in examiners if ex.examiner_type == 'internal' %}
+                                    <tr>
+                                        <td style="font-size: 0.85rem;">{{ ex.full_name }}</td>
+                                        <td>
+                                            <input type="number" min="0" step="1" name="limit_{{ ex.examiner_id }}" value="{{ ex.limit_n }}" style="padding: 4px 8px; width: 100%; box-sizing: border-box;">
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    <!-- External Examiners Table -->
+                    <div>
+                        <h4 style="margin: 0 0 8px 0; font-size: 0.85rem; color: var(--warning-color, #f59e0b); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">External Examiners</h4>
+                        <div style="max-height: 350px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); background-color: var(--bg-primary);">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Examiner</th>
+                                        <th style="width: 100px;">Limit N</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for ex in examiners if ex.examiner_type == 'external' %}
+                                    <tr>
+                                        <td style="font-size: 0.85rem;">{{ ex.full_name }}</td>
+                                        <td>
+                                            <input type="number" min="0" step="1" name="limit_{{ ex.examiner_id }}" value="{{ ex.limit_n }}" style="padding: 4px 8px; width: 100%; box-sizing: border-box;">
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary btn-sm">Save Workload Limits</button>
+                <div id="limits-result" style="margin-top: 10px;"></div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Right Column: Bans and Project Groups -->
+    <div>
+        <!-- Card 3: Examiner-Student Bans -->
+        <div class="card">
+            <div class="card-title">Examiner ↔ Student Conflict Bans</div>
+            <p class="subtitle" style="margin-bottom: 16px;">
+                Prevent examiners from being assigned to specific students due to supervisors conflict of interest or other bans.
+            </p>
+            
+            <!-- Add Ban Form -->
+            <form hx-post="/constraints/add-ban" hx-target="#bans-list-container" style="margin-bottom: 20px; padding: 16px; background-color: rgba(255,255,255,0.02); border-radius: var(--radius-sm); border: 1px solid var(--border);">
+                <div class="form-group">
+                    <label>Select Student</label>
+                    <select name="student_id" required>
+                        <option value="">-- Choose Student --</option>
+                        {% for st in students %}
+                        <option value="{{ st.student_id }}">{{ st.full_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Select Examiner to BAN</label>
+                    <select name="examiner_id" required>
+                        <option value="">-- Choose Examiner --</option>
+                        {% for ex in examiners %}
+                        <option value="{{ ex.examiner_id }}">{{ ex.full_name }} ({{ ex.examiner_type }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Reason (Optional)</label>
+                    <input type="text" name="reason" placeholder="e.g. Supervisor, prior collaboration">
+                </div>
+                <button type="submit" class="btn btn-secondary btn-sm">Add Ban Link</button>
+            </form>
+
+            <!-- Active Bans List -->
+            <div id="bans-list-container">
+                {% include "bans_list.html" %}
+            </div>
+        </div>
+
+        <!-- Card 3.5: Pre-matched Allocations (Solver Excluded) -->
+        <div class="card">
+            <div class="card-title">Pre-matched Allocations (Solver Excluded)</div>
+            <p class="subtitle" style="margin-bottom: 16px;">
+                Assign a given internal and/or external examiner to a student. Doing so updates examiner workload and removes the student from the matching pool.
+            </p>
+            
+            <!-- Add Pre-match Form -->
+            <form hx-post="/constraints/add-prematch" hx-target="#prematches-list-container" style="margin-bottom: 20px; padding: 16px; background-color: rgba(255,255,255,0.02); border-radius: var(--radius-sm); border: 1px solid var(--border);">
+                <div class="form-group">
+                    <label>Select Student</label>
+                    <select name="student_id" required>
+                        <option value="">-- Choose Student --</option>
+                        {% for st in students %}
+                        <option value="{{ st.student_id }}">{{ st.full_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                    <div>
+                        <label>Internal Examiner (Optional)</label>
+                        <select name="internal_id">
+                            <option value="">-- Choose Internal --</option>
+                            {% for ex in examiners if ex.examiner_type == 'internal' %}
+                            <option value="{{ ex.examiner_id }}">{{ ex.full_name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label>External Examiner (Optional)</label>
+                        <select name="external_id">
+                            <option value="">-- Choose External --</option>
+                            {% for ex in examiners if ex.examiner_type == 'external' %}
+                            <option value="{{ ex.examiner_id }}">{{ ex.full_name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-secondary btn-sm" style="margin-top: 8px;">Save Pre-match</button>
+            </form>
+
+            <!-- Active Pre-matches List -->
+            <div id="prematches-list-container">
+                {% include "prematches_list.html" %}
+            </div>
+        </div>
+
+        <!-- Card 4: Linked Projects / Project Groups -->
+        <div class="card">
+            <div class="card-title">Linked Project Groups</div>
+            <p class="subtitle" style="margin-bottom: 16px;">
+                Link students together so they share the exact same internal and external examiners (coupled theses).
+            </p>
+            
+            <!-- Create or extend group form -->
+            <form hx-post="/constraints/save-group" hx-target="#groups-container" style="margin-bottom: 20px; padding: 16px; background-color: rgba(255,255,255,0.02); border-radius: var(--radius-sm); border: 1px solid var(--border);">
+                <div class="form-group">
+                    <label>Select Students</label>
+                    <div style="max-height: 150px; overflow-y: auto; border: 1px solid var(--border); padding: 8px; border-radius: var(--radius-sm); background-color: var(--bg-primary);">
+                        {% for st in students %}
+                        <div style="margin-bottom: 6px; display: flex; align-items: center; gap: 8px;">
+                            <input type="checkbox" name="student_ids" value="{{ st.student_id }}" id="st_grp_{{ st.student_id }}" style="width: auto;">
+                            <label for="st_grp_{{ st.student_id }}" style="display: inline; margin: 0; cursor: pointer; color: var(--text-primary);">{{ st.full_name }}</label>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label>Group Destination</label>
+                    <div style="display: flex; gap: 16px; align-items: center;">
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            <input type="radio" name="group_dest" value="new" id="dest_new" checked style="width: auto;" onclick="document.getElementById('existing-group-select').style.display='none'">
+                            <label for="dest_new" style="display: inline; margin: 0; cursor: pointer;">New Group</label>
+                        </div>
+                        {% if groups %}
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            <input type="radio" name="group_dest" value="existing" id="dest_exist" style="width: auto;" onclick="document.getElementById('existing-group-select').style.display='block'">
+                            <label for="dest_exist" style="display: inline; margin: 0; cursor: pointer;">Add to Existing Group</label>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                <div class="form-group" id="existing-group-select" style="display: none;">
+                    <label>Choose Existing Group ID</label>
+                    <select name="existing_group_id">
+                        {% for g in groups %}
+                        <option value="{{ g.group_id }}">Group ID: {{ g.group_id }} ({{ g.members }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <button type="submit" class="btn btn-secondary btn-sm">Save Group Coupling</button>
+            </form>
+            
+            <div id="groups-container">
+                {% include "groups_list.html" %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Global sorting states
+    window.bansSortCol = null;
+    window.bansSortAsc = true;
+    window.pmSortCol = null;
+    window.pmSortAsc = true;
+
+    window.sortBansTable = function(colIndex, toggle = true) {
+        var table = document.getElementById('bans-table');
+        if (!table) return;
+        var tbody = table.querySelector('tbody');
+        if (!tbody) return;
+        var rows = Array.from(tbody.querySelectorAll('tr'));
+        if (rows.length === 0) return;
+        var header = table.querySelectorAll('th')[colIndex];
+        if (toggle) {
+            if (window.bansSortCol === colIndex) {
+                window.bansSortAsc = !window.bansSortAsc;
+            } else {
+                window.bansSortCol = colIndex;
+                window.bansSortAsc = true;
+            }
+        }
+        table.querySelectorAll('th').forEach(function(th) {
+            th.classList.remove('sort-asc', 'sort-desc');
+        });
+        if (window.bansSortCol !== null) {
+            var activeHeader = table.querySelectorAll('th')[window.bansSortCol];
+            if (activeHeader) {
+                activeHeader.classList.add(window.bansSortAsc ? 'sort-asc' : 'sort-desc');
+            }
+        }
+        rows.sort(function(a, b) {
+            var valA = a.cells[window.bansSortCol].innerText.trim().toLowerCase();
+            var valB = b.cells[window.bansSortCol].innerText.trim().toLowerCase();
+            if (valA < valB) return window.bansSortAsc ? -1 : 1;
+            if (valA > valB) return window.bansSortAsc ? 1 : -1;
+            return 0;
+        });
+        rows.forEach(function(row) { tbody.appendChild(row); });
+    };
+
+    window.sortPrematchesTable = function(colIndex, toggle = true) {
+        var table = document.getElementById('prematches-table');
+        if (!table) return;
+        var tbody = table.querySelector('tbody');
+        if (!tbody) return;
+        var rows = Array.from(tbody.querySelectorAll('tr'));
+        if (rows.length === 0) return;
+        var header = table.querySelectorAll('th')[colIndex];
+        if (toggle) {
+            if (window.pmSortCol === colIndex) {
+                window.pmSortAsc = !window.pmSortAsc;
+            } else {
+                window.pmSortCol = colIndex;
+                window.pmSortAsc = true;
+            }
+        }
+        table.querySelectorAll('th').forEach(function(th) {
+            th.classList.remove('sort-asc', 'sort-desc');
+        });
+        if (window.pmSortCol !== null) {
+            var activeHeader = table.querySelectorAll('th')[window.pmSortCol];
+            if (activeHeader) {
+                activeHeader.classList.add(window.pmSortAsc ? 'sort-asc' : 'sort-desc');
+            }
+        }
+        rows.sort(function(a, b) {
+            var valA = a.cells[window.pmSortCol].innerText.trim().toLowerCase();
+            var valB = b.cells[window.pmSortCol].innerText.trim().toLowerCase();
+            if (valA < valB) return window.pmSortAsc ? -1 : 1;
+            if (valA > valB) return window.pmSortAsc ? 1 : -1;
+            return 0;
+        });
+        rows.forEach(function(row) { tbody.appendChild(row); });
+    };
+
+    // HTMX swap listener to re-apply sorting
+    document.body.addEventListener('htmx:afterSwap', function(evt) {
+        if (evt.detail.target.id === 'bans-list-container') {
+            if (window.bansSortCol !== null) {
+                window.sortBansTable(window.bansSortCol, false);
+            }
+        } else if (evt.detail.target.id === 'prematches-list-container') {
+            if (window.pmSortCol !== null) {
+                window.sortPrematchesTable(window.pmSortCol, false);
+            }
+        }
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,201 @@
+<!-- app/templates/student_edit_form.html -->
+<div class="card" style="margin-bottom: 0;">
+    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 12px; margin-bottom: 20px;">
+        <h3 style="font-size: 1.15rem; font-weight: 600; color: var(--accent);">
+            Edit Student Details
+        </h3>
+        <span style="font-size: 0.75rem; color: var(--text-muted);">ID: {{ student.student_id }}</span>
+    </div>
+
+    <!-- Alert banner inside form -->
+    <div id="form-alert-container">
+        {% if alert_message %}
+        <div class="alert {% if alert_success %}alert-success{% else %}alert-danger{% endif %}" style="padding: 10px 14px; margin-bottom: 16px; font-size: 0.85rem;">
+            {{ alert_message }}
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Tab Switcher -->
+    <div class="tabs-sub" style="display: flex; gap: 4px; background-color: rgba(0, 0, 0, 0.2); padding: 4px; border-radius: var(--radius-sm); border: 1px solid var(--border); margin-bottom: 16px;">
+        <button type="button" id="tab-btn-basic" class="sub-tab-btn" onclick="switchEditTab('basic')" style="flex: 1; padding: 6px 12px; font-size: 0.85rem; border-radius: var(--radius-sm); border: none; background: {% if active_edit_tab == 'basic' %}var(--accent){% else %}none{% endif %}; color: {% if active_edit_tab == 'basic' %}var(--text-primary){% else %}var(--text-secondary){% endif %}; cursor: pointer; font-weight: 500; transition: var(--transition);">
+            Basic Info
+        </button>
+        <button type="button" id="tab-btn-extra" class="sub-tab-btn" onclick="switchEditTab('extra')" style="flex: 1; padding: 6px 12px; font-size: 0.85rem; border-radius: var(--radius-sm); border: none; background: {% if active_edit_tab == 'extra' %}var(--accent){% else %}none{% endif %}; color: {% if active_edit_tab == 'extra' %}var(--text-primary){% else %}var(--text-secondary){% endif %}; cursor: pointer; font-weight: 500; transition: var(--transition);">
+            Thesis Characteristics
+        </button>
+    </div>
+
+    <form hx-post="/person-data/student/{{ student.student_id }}" hx-target="#edit-panel" style="display: flex; flex-direction: column; gap: 14px;">
+        <!-- Hidden field for active tab -->
+        <input type="hidden" id="active-edit-tab-input" name="active_edit_tab" value="{{ active_edit_tab }}">
+
+        <!-- SECTION: Basic Info -->
+        <div id="student-section-basic" style="display: {% if active_edit_tab == 'basic' %}flex{% else %}none{% endif %}; flex-direction: column; gap: 14px;">
+            <div style="font-size: 0.8rem; font-weight: 600; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.5px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 4px; margin-bottom: 4px;">
+                Basic Info
+            </div>
+            
+            <div class="form-group" style="margin-bottom: 0;">
+                <label style="font-size: 0.8rem; margin-bottom: 4px;">Full Name *</label>
+                <input type="text" name="full_name" value="{{ student.full_name }}" required style="padding: 8px 12px; background-color: var(--bg-primary);">
+            </div>
+
+            <div class="form-group" style="margin-bottom: 0;">
+                <label style="font-size: 0.8rem; margin-bottom: 4px;">Email Address</label>
+                <input type="email" name="email" value="{{ student.email or '' }}" style="padding: 8px 12px; background-color: var(--bg-primary);">
+            </div>
+
+            <div class="form-group" style="margin-bottom: 0;">
+                <label style="font-size: 0.8rem; margin-bottom: 4px;">Project Title</label>
+                <textarea name="project_title" rows="2" style="padding: 8px 12px; background-color: var(--bg-primary); resize: vertical; min-height: 50px;">{{ student.project_title or '' }}</textarea>
+            </div>
+
+            <div class="form-group" style="margin-bottom: 0;">
+                <label style="font-size: 0.8rem; margin-bottom: 4px;">Supervisor(s)</label>
+                <input type="text" name="supervisors" value="{{ student.supervisors or '' }}" style="padding: 8px 12px; background-color: var(--bg-primary);" placeholder="e.g. Venus Williams, Andy Murray">
+            </div>
+
+            <div class="form-group" style="margin-bottom: 0;">
+                <label style="font-size: 0.8rem; margin-bottom: 4px;">Pairs / Partners</label>
+                <div style="padding: 8px 12px; background-color: rgba(0, 0, 0, 0.15); border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 0.85rem; min-height: 38px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                    {% if student.partners %}
+                        {% for p in student.partners %}
+                            <span class="badge" style="background-color: rgba(255, 255, 255, 0.08); border: 1px solid var(--border); color: var(--text-primary); font-size: 0.75rem; padding: 3px 8px; border-radius: var(--radius-sm);">
+                                {{ p.full_name }}
+                            </span>
+                        {% endfor %}
+                    {% else %}
+                        <span style="color: var(--text-muted); font-size: 0.85rem;">None</span>
+                    {% endif %}
+                    <span style="font-size: 0.75rem; color: var(--text-muted); margin-left: auto;">(Manage coupling in Constraints tab)</span>
+                </div>
+            </div>
+
+            <div style="display: flex; gap: 20px; align-items: center; margin: 4px 0;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <input type="checkbox" name="deferred" id="edit-deferred" {% if student.deferred %}checked{% endif %} style="width: auto; height: 16px; width: 16px; cursor: pointer; accent-color: var(--accent);">
+                    <label for="edit-deferred" style="display: inline; margin: 0; cursor: pointer; color: var(--text-primary); font-size: 0.85rem;">Deferred status</label>
+                </div>
+                
+                <div style="font-size: 0.85rem;">
+                    Status: 
+                    {% if student.pre_matched %}
+                    <span class="badge badge-success" style="font-size: 0.65rem; padding: 2px 6px;">Pre-matched (Locked)</span>
+                    {% else %}
+                    <span class="badge badge-warning" style="background-color: rgba(99,102,241,0.1); color: var(--accent); font-size: 0.65rem; padding: 2px 6px;">Matching Pool</span>
+                    {% endif %}
+                </div>
+            </div>
+
+        </div>
+
+        <!-- SECTION: Thesis Characteristics -->
+        <div id="student-section-characteristics" style="display: {% if active_edit_tab == 'extra' %}flex{% else %}none{% endif %}; flex-direction: column; gap: 14px;">
+            <div style="font-size: 0.8rem; font-weight: 600; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.5px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 4px; margin-bottom: 4px;">
+                Thesis Characteristics
+            </div>
+            <div style="max-height: 380px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); margin-bottom: 4px; background-color: var(--bg-primary);">
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width: 50px; text-align: center; padding: 8px 12px;">In Scope</th>
+                            <th style="padding: 8px 12px;">Characteristic (Category)</th>
+                            <th style="width: 130px; padding: 8px 12px; text-align: right;">Custom Weight</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for cat in categories %}
+                        <tr>
+                            <td style="text-align: center; vertical-align: middle; padding: 8px 12px;">
+                                <input type="checkbox" name="category_ids" value="{{ cat.category_id }}" {% if cat.in_scope %}checked{% endif %} style="width: 18px; height: 18px; cursor: pointer; accent-color: var(--accent); margin: 0 auto; display: block;">
+                            </td>
+                            <td style="vertical-align: middle; font-size: 0.9rem; padding: 8px 12px;">{{ cat.name }}</td>
+                            <td style="vertical-align: middle; padding: 8px 12px;">
+                                <input type="number" step="0.01" min="0" name="weight_{{ cat.category_id }}" value="{% if cat.custom_weight is not none %}{{ cat.custom_weight }}{% endif %}" placeholder="e.g. {{ cat.default_weight }}" style="padding: 4px 8px; font-size: 0.85rem; background-color: var(--bg-tertiary); border: 1px solid var(--border); color: var(--text-primary); border-radius: var(--radius-sm); width: 100%; text-align: right;">
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p style="font-size: 0.75rem; color: var(--text-muted); line-height: 1.35; margin-bottom: 0;">
+                Note: Checking "In Scope" marks that competence area as required for the student's thesis. Specifying a "Custom Weight" overrides the default penalty weight (shown as placeholder) for matching mismatches on this specific student.
+            </p>
+
+            <div style="font-size: 0.8rem; font-weight: 600; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.5px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 4px; margin-top: 10px; margin-bottom: 4px;">
+                Freetext Characteristics (Inspection Only)
+            </div>
+
+            <div class="form-group" style="margin-bottom: 0;">
+                <label style="font-size: 0.8rem; margin-bottom: 4px;">Sample Other Description</label>
+                <input type="text" name="sample_other_desc" value="{{ student.sample_other_desc or '' }}" style="padding: 8px 12px; background-color: var(--bg-primary);">
+            </div>
+
+            <div class="form-group" style="margin-bottom: 0;">
+                <label style="font-size: 0.8rem; margin-bottom: 4px;">Methodology Other Description</label>
+                <input type="text" name="methodology_other_desc" value="{{ student.methodology_other_desc or '' }}" style="padding: 8px 12px; background-color: var(--bg-primary);">
+            </div>
+
+            <div class="form-group" style="margin-bottom: 0;">
+                <label style="font-size: 0.8rem; margin-bottom: 4px;">Field Other Description</label>
+                <input type="text" name="field_other_desc" value="{{ student.field_other_desc or '' }}" style="padding: 8px 12px; background-color: var(--bg-primary);">
+            </div>
+
+            <div class="form-group" style="margin-bottom: 0;">
+                <label style="font-size: 0.8rem; margin-bottom: 4px;">Additional Characteristics</label>
+                <textarea name="additional_characteristics" rows="2" style="padding: 8px 12px; background-color: var(--bg-primary); resize: vertical; min-height: 50px;">{{ student.additional_characteristics or '' }}</textarea>
+            </div>
+        </div>
+        
+        <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 6px;">
+            Record Created: {{ student.created_at.strftime('%Y-%m-%d %H:%M:%S') if student.created_at else '—' }}
+        </div>
+
+        <!-- Form Buttons -->
+        <div style="display: flex; gap: 12px; margin-top: 16px; border-top: 1px solid var(--border); padding-top: 16px;">
+            <button type="submit" class="btn btn-primary" style="flex: 1; padding: 8px 16px; font-size: 0.9rem;">
+                Save Changes
+            </button>
+            <button type="button" 
+                    hx-post="/person-data/delete-student" 
+                    hx-vals='{"student_id": {{ student.student_id }}}'
+                    hx-confirm="Are you sure you want to permanently delete student '{{ student.full_name }}'? This will also delete any allocations, bans, and group associations for this student."
+                    hx-target="#edit-panel"
+                    class="btn btn-danger" 
+                    style="padding: 8px 16px; font-size: 0.9rem;">
+                Delete Student
+            </button>
+        </div>
+    </form>
+</div>
+
+<script>
+function switchEditTab(tabName) {
+    // 1. Update active tab input value
+    document.getElementById('active-edit-tab-input').value = tabName;
+    
+    // 2. Toggle active style on tab switcher buttons
+    const btnBasic = document.getElementById('tab-btn-basic');
+    const btnExtra = document.getElementById('tab-btn-extra');
+    
+    if (tabName === 'basic') {
+        btnBasic.style.backgroundColor = 'var(--accent)';
+        btnBasic.style.color = 'var(--text-primary)';
+        btnExtra.style.backgroundColor = 'transparent';
+        btnExtra.style.color = 'var(--text-secondary)';
+        
+        document.getElementById('student-section-basic').style.display = 'flex';
+        document.getElementById('student-section-characteristics').style.display = 'none';
+    } else {
+        btnBasic.style.backgroundColor = 'transparent';
+        btnBasic.style.color = 'var(--text-secondary)';
+        btnExtra.style.backgroundColor = 'var(--accent)';
+        btnExtra.style.color = 'var(--text-primary)';
+        
+        document.getElementById('student-section-basic').style.display = 'none';
+        document.getElementById('student-section-characteristics').style.display = 'flex';
+    }
+}
+</script>
+

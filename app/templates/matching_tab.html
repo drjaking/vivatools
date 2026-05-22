@@ -1,0 +1,139 @@
+<!-- app/templates/matching_tab.html -->
+{% extends "base.html" %}
+
+{% block content %}
+<!-- Tab 3: Matching & Diagnostics Dashboard -->
+<div class="card">
+    <div class="card-title">Solver Execution Control</div>
+    <p class="subtitle" style="margin-bottom: 20px;">
+        Run the Google OR-Tools CP-SAT solver to compute optimal thesis-examiner pairings based on default weights and limits constraints.
+    </p>
+    
+    <form hx-post="/matching/run-solver" hx-target="#solver-console" hx-indicator="#solver-run-indicator">
+        <div class="grid-3" style="margin-bottom: 16px;">
+            <div class="form-group">
+                <label>Weight for 'Could' Competence</label>
+                <input type="number" name="weight_could" value="3" required>
+            </div>
+            <div class="form-group">
+                <label>Weight for 'Cannot' Competence</label>
+                <input type="number" name="weight_cannot" value="10" required>
+            </div>
+            <div class="form-group">
+                <label>Weight for Group Mismatch</label>
+                <input type="number" name="weight_group_miss" value="5" required>
+            </div>
+        </div>
+        <div class="grid-2" style="margin-bottom: 16px;">
+            <div class="form-group">
+                <label>Max Search Solver Time (Seconds)</label>
+                <input type="number" name="max_seconds" value="300" required>
+            </div>
+            <div class="form-group">
+                <label>Search Threads / Workers</label>
+                <input type="number" name="threads" value="8" required>
+            </div>
+        </div>
+        
+        <div style="display: flex; gap: 12px; align-items: center;">
+            <button type="submit" class="btn btn-primary">
+                Run Allocations Solver
+            </button>
+            <button type="button" 
+                    hx-post="/matching/clear-assignments" 
+                    hx-target="#diagnostics-container"
+                    hx-confirm="Are you sure you want to clear all solver-generated matches? Pre-matched (locked) assignments will be kept."
+                    class="btn btn-danger">
+                Clear Match Allocations
+            </button>
+            <span id="solver-run-indicator" class="htmx-indicator">
+                <span class="spinner"></span> Computing Optimal Allocations...
+            </span>
+        </div>
+    </form>
+    
+    <div style="margin-top: 20px;">
+        <label>Solver Log Console</label>
+        <div id="solver-console" class="log-box">
+Console idle. Click 'Run Allocations Solver' to start execution.
+        </div>
+    </div>
+</div>
+
+<div id="diagnostics-container">
+    {% include "diagnostics_tables.html" %}
+</div>
+
+
+
+
+<script>
+let currentSortCol = null;
+let currentSortAsc = true;
+
+function sortTable(tableId, colIndex) {
+    const table = document.getElementById(tableId);
+    if (!table) return;
+    const tbody = table.querySelector('tbody');
+    if (!tbody) return;
+    const rows = Array.from(tbody.querySelectorAll('tr'));
+    
+    const header = table.querySelectorAll('th')[colIndex];
+    if (currentSortCol === colIndex) {
+        currentSortAsc = !currentSortAsc;
+    } else {
+        currentSortCol = colIndex;
+        currentSortAsc = true;
+    }
+    
+    table.querySelectorAll('th').forEach(th => {
+        th.classList.remove('sort-asc', 'sort-desc');
+    });
+    
+    header.classList.add(currentSortAsc ? 'sort-asc' : 'sort-desc');
+    
+    rows.sort((a, b) => {
+        let valA, valB;
+        if (colIndex === 0) { // Student Name
+            valA = a.cells[colIndex].innerText.trim().toLowerCase();
+            valB = b.cells[colIndex].innerText.trim().toLowerCase();
+        } else if (colIndex === 1) { // Deferred
+            const chkA = a.cells[colIndex].querySelector('input[type="checkbox"]');
+            const chkB = b.cells[colIndex].querySelector('input[type="checkbox"]');
+            valA = (chkA && chkA.checked) ? 1 : 0;
+            valB = (chkB && chkB.checked) ? 1 : 0;
+        } else if (colIndex === 2) { // Thesis Title
+            valA = a.cells[colIndex].innerText.trim().toLowerCase();
+            valB = b.cells[colIndex].innerText.trim().toLowerCase();
+        } else if (colIndex === 3 || colIndex === 4) { // Internal / External Dropdowns
+            const selectA = a.cells[colIndex].querySelector('select');
+            const selectB = b.cells[colIndex].querySelector('select');
+            valA = selectA ? selectA.options[selectA.selectedIndex].text.trim().toLowerCase() : '';
+            valB = selectB ? selectB.options[selectB.selectedIndex].text.trim().toLowerCase() : '';
+        } else if (colIndex === 5) { // Positivity / Penalty
+            const textA = a.cells[colIndex].innerText.trim();
+            const textB = b.cells[colIndex].innerText.trim();
+            valA = parseFloat(textA) || 0;
+            valB = parseFloat(textB) || 0;
+        }
+        
+        if (valA < valB) return currentSortAsc ? -1 : 1;
+        if (valA > valB) return currentSortAsc ? 1 : -1;
+        return 0;
+    });
+    
+    rows.forEach(row => tbody.appendChild(row));
+}
+
+document.body.addEventListener('htmx:afterSwap', function(evt) {
+    if (evt.detail.target.id === 'diagnostics-container' || evt.detail.target.id === 'allocations-table') {
+        if (currentSortCol !== null) {
+            const col = currentSortCol;
+            currentSortCol = null; // reset to prevent toggle
+            sortTable('allocations-table', col);
+        }
+    }
+});
+</script>
+
+{% endblock %}

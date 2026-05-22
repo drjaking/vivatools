@@ -1,0 +1,160 @@
+<!-- app/templates/examiner_edit_form.html -->
+<div class="card" style="margin-bottom: 0;">
+    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 12px; margin-bottom: 20px;">
+        <h3 style="font-size: 1.15rem; font-weight: 600; color: var(--accent);">
+            Edit Examiner Details
+        </h3>
+        <span style="font-size: 0.75rem; color: var(--text-muted);">ID: {{ examiner.examiner_id }}</span>
+    </div>
+
+    <!-- Alert banner inside form -->
+    <div id="form-alert-container">
+        {% if alert_message %}
+        <div class="alert {% if alert_success %}alert-success{% else %}alert-danger{% endif %}" style="padding: 10px 14px; margin-bottom: 16px; font-size: 0.85rem;">
+            {{ alert_message }}
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Tab Switcher -->
+    <div class="tabs-sub" style="display: flex; gap: 4px; background-color: rgba(0, 0, 0, 0.2); padding: 4px; border-radius: var(--radius-sm); border: 1px solid var(--border); margin-bottom: 16px;">
+        <button type="button" id="tab-btn-basic" class="sub-tab-btn" onclick="switchEditTab('basic')" style="flex: 1; padding: 6px 12px; font-size: 0.85rem; border-radius: var(--radius-sm); border: none; background: {% if active_edit_tab == 'basic' %}var(--accent){% else %}none{% endif %}; color: {% if active_edit_tab == 'basic' %}var(--text-primary){% else %}var(--text-secondary){% endif %}; cursor: pointer; font-weight: 500; transition: var(--transition);">
+            Basic Info
+        </button>
+        <button type="button" id="tab-btn-extra" class="sub-tab-btn" onclick="switchEditTab('extra')" style="flex: 1; padding: 6px 12px; font-size: 0.85rem; border-radius: var(--radius-sm); border: none; background: {% if active_edit_tab == 'extra' %}var(--accent){% else %}none{% endif %}; color: {% if active_edit_tab == 'extra' %}var(--text-primary){% else %}var(--text-secondary){% endif %}; cursor: pointer; font-weight: 500; transition: var(--transition);">
+            Competences
+        </button>
+    </div>
+
+    <form hx-post="/person-data/examiner/{{ examiner.examiner_id }}" hx-target="#edit-panel" style="display: flex; flex-direction: column; gap: 14px;">
+        <!-- Hidden field for active tab -->
+        <input type="hidden" id="active-edit-tab-input" name="active_edit_tab" value="{{ active_edit_tab }}">
+
+        <!-- SECTION: Basic Info -->
+        <div id="examiner-section-basic" style="display: {% if active_edit_tab == 'basic' %}flex{% else %}none{% endif %}; flex-direction: column; gap: 14px;">
+            <div style="font-size: 0.8rem; font-weight: 600; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.5px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 4px; margin-bottom: 4px;">
+                Basic Info
+            </div>
+            
+            <div class="form-group" style="margin-bottom: 0;">
+                <label style="font-size: 0.8rem; margin-bottom: 4px;">Full Name *</label>
+                <input type="text" name="full_name" value="{{ examiner.full_name }}" required style="padding: 8px 12px; background-color: var(--bg-primary);">
+            </div>
+
+            <div class="form-group" style="margin-bottom: 0;">
+                <label style="font-size: 0.8rem; margin-bottom: 4px;">Email Address</label>
+                <input type="email" name="email" value="{{ examiner.email or '' }}" style="padding: 8px 12px; background-color: var(--bg-primary);">
+            </div>
+
+            <div class="form-group" style="margin-bottom: 0;">
+                <label style="font-size: 0.8rem; margin-bottom: 4px;">Examiner Type *</label>
+                <select name="examiner_type" required style="padding: 8px 12px; background-color: var(--bg-primary);">
+                    <option value="internal" {% if examiner.examiner_type == 'internal' %}selected{% endif %}>Internal Examiner</option>
+                    <option value="external" {% if examiner.examiner_type == 'external' %}selected{% endif %}>External Examiner</option>
+                </select>
+            </div>
+
+            <div style="font-size: 0.8rem; font-weight: 600; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.5px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 4px; margin-top: 10px; margin-bottom: 4px;">
+                Workload Limits
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label style="font-size: 0.8rem; margin-bottom: 4px;">Max Allocations (Limit N)</label>
+                    <input type="number" name="limit_n" value="{{ examiner.limit_n }}" min="0" required style="padding: 8px 12px; background-color: var(--bg-primary);">
+                </div>
+                
+                <div>
+                    <label style="font-size: 0.8rem; margin-bottom: 4px;">Current Active Allocations</label>
+                    <div style="padding: 8px 12px; background-color: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: var(--radius-sm); font-weight: 600; font-size: 0.95rem; height: 42px; display: flex; align-items: center;">
+                        {{ examiner.active_assignments }} assigned
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- SECTION: Competences -->
+        <div id="examiner-section-competences" style="display: {% if active_edit_tab == 'extra' %}flex{% else %}none{% endif %}; flex-direction: column; gap: 14px;">
+            <div style="font-size: 0.8rem; font-weight: 600; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.5px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 4px; margin-bottom: 4px;">
+                Competences
+            </div>
+            <div style="max-height: 380px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); margin-bottom: 4px; background-color: var(--bg-primary);">
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="padding: 8px 12px;">Competence (Category)</th>
+                            <th style="width: 140px; padding: 8px 12px; text-align: right;">Level</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for cat in categories %}
+                        <tr>
+                            <td style="vertical-align: middle; font-size: 0.9rem; padding: 8px 12px;">{{ cat.name }}</td>
+                            <td style="vertical-align: middle; padding: 8px 12px; text-align: right;">
+                                <select name="competence_{{ cat.category_id }}" style="padding: 4px 8px; font-size: 0.85rem; background-color: var(--bg-tertiary); border: 1px solid var(--border); color: var(--text-primary); border-radius: var(--radius-sm); width: auto; cursor: pointer; text-align-last: right;">
+                                    <option value="can" {% if cat.competence == 'can' %}selected{% endif %}>Can</option>
+                                    <option value="could" {% if cat.competence == 'could' %}selected{% endif %}>Could</option>
+                                    <option value="cannot" {% if cat.competence == 'cannot' or not cat.competence %}selected{% endif %}>Cannot</option>
+                                </select>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p style="font-size: 0.75rem; color: var(--text-muted); line-height: 1.35; margin-bottom: 0;">
+                Note: Configure the examiner's capacity level for each thesis topic category. "Can" means fully competent, "Could" means can do if needed (with weight penalty), and "Cannot" means examiner is not qualified or unavailable for this topic.
+            </p>
+        </div>
+        
+        <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 6px;">
+            Record Created: {{ examiner.created_at.strftime('%Y-%m-%d %H:%M:%S') if examiner.created_at else '—' }}
+        </div>
+
+        <!-- Form Buttons -->
+        <div style="display: flex; gap: 12px; margin-top: 16px; border-top: 1px solid var(--border); padding-top: 16px;">
+            <button type="submit" class="btn btn-primary" style="flex: 1; padding: 8px 16px; font-size: 0.9rem;">
+                Save Changes
+            </button>
+            <button type="button" 
+                    hx-post="/person-data/delete-examiner" 
+                    hx-vals='{"examiner_id": {{ examiner.examiner_id }}}'
+                    hx-confirm="Are you sure you want to permanently delete examiner '{{ examiner.full_name }}'? This will remove their competences, allocations, limits, and bans."
+                    hx-target="#edit-panel"
+                    class="btn btn-danger" 
+                    style="padding: 8px 16px; font-size: 0.9rem;">
+                Delete Examiner
+            </button>
+        </div>
+    </form>
+</div>
+
+<script>
+function switchEditTab(tabName) {
+    // 1. Update active tab input value
+    document.getElementById('active-edit-tab-input').value = tabName;
+    
+    // 2. Toggle active style on tab switcher buttons
+    const btnBasic = document.getElementById('tab-btn-basic');
+    const btnExtra = document.getElementById('tab-btn-extra');
+    
+    if (tabName === 'basic') {
+        btnBasic.style.backgroundColor = 'var(--accent)';
+        btnBasic.style.color = 'var(--text-primary)';
+        btnExtra.style.backgroundColor = 'transparent';
+        btnExtra.style.color = 'var(--text-secondary)';
+        
+        document.getElementById('examiner-section-basic').style.display = 'flex';
+        document.getElementById('examiner-section-competences').style.display = 'none';
+    } else {
+        btnBasic.style.backgroundColor = 'transparent';
+        btnBasic.style.color = 'var(--text-secondary)';
+        btnExtra.style.backgroundColor = 'var(--accent)';
+        btnExtra.style.color = 'var(--text-primary)';
+        
+        document.getElementById('examiner-section-basic').style.display = 'none';
+        document.getElementById('examiner-section-competences').style.display = 'flex';
+    }
+}
+</script>
+

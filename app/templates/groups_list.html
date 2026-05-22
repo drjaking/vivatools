@@ -1,0 +1,35 @@
+<!-- app/templates/groups_list.html -->
+<div style="max-height: 300px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius-sm);">
+    {% if groups %}
+    <table>
+        <thead>
+            <tr>
+                <th>Group ID</th>
+                <th>Group Members</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for g in groups %}
+            <tr>
+                <td>Group {{ g.group_id }}</td>
+                <td>{{ g.members }}</td>
+                <td>
+                    <button hx-post="/constraints/remove-group" 
+                            hx-vals='{"group_id": {{ g.group_id }}}'
+                            hx-target="#groups-container"
+                            class="btn btn-danger btn-sm"
+                            style="padding: 2px 6px; font-size: 0.75rem;">
+                        Dissolve
+                    </button>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div style="padding: 20px; text-align: center; color: var(--text-muted);">
+        No coupled project groups configured.
+    </div>
+    {% endif %}
+</div>

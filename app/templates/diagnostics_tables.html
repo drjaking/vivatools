@@ -1,0 +1,190 @@
+<!-- app/templates/diagnostics_tables.html -->
+<div class="grid-2">
+    <!-- Card 1: Student Allocations -->
+    <div class="card" style="grid-column: span 2;">
+        <div class="card-title">
+            <span>Student-Examiner Allocations & Scores</span>
+            <span class="badge badge-success">Manual Overrides Active</span>
+        </div>
+        <p class="subtitle" style="margin-bottom: 16px;">
+            Adjust internal/external pairings. Changing an assignment automatically validates bans and updates workloads.
+        </p>
+        
+        <div style="overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius-sm);">
+            <table id="allocations-table">
+                <thead>
+                    <tr>
+                        <th class="sortable" onclick="sortTable('allocations-table', 0)">Student</th>
+                        <th class="sortable" style="text-align: center; width: 80px;" onclick="sortTable('allocations-table', 1)">Deferred</th>
+                        <th class="sortable" onclick="sortTable('allocations-table', 2)">Thesis Title</th>
+                        <th class="sortable" onclick="sortTable('allocations-table', 3)">Internal Examiner</th>
+                        <th class="sortable" onclick="sortTable('allocations-table', 4)">External Examiner</th>
+                        <th class="sortable" onclick="sortTable('allocations-table', 5)">Positivity / Penalty</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% if student_rows %}
+                        {% for row in student_rows %}
+                        <tr {% if row.is_pre_matched %}style="background-color: rgba(245, 158, 11, 0.04); border-left: 3px solid var(--warning);" {% elif row.is_deferred %}style="background-color: rgba(255, 255, 255, 0.02); opacity: 0.65;"{% endif %}>
+                            <td style="font-weight: 500;">
+                                {% if row.is_pre_matched %}
+                                <span title="Pre-matched (Locked in place)" style="color: var(--warning); margin-right: 4px;">🔒</span>
+                                {% endif %}
+                                {{ row.student_name }}
+                            </td>
+                            <td style="text-align: center;">
+                                <input type="checkbox" 
+                                       hx-post="/matching/toggle-deferred" 
+                                       hx-vals='{"student_id": {{ row.student_id }}}'
+                                       hx-target="#diagnostics-container"
+                                       {% if row.is_deferred %}checked{% endif %}
+                                       style="width: 20px; height: 20px; cursor: pointer;">
+                            </td>
+                            <td style="font-size: 0.85rem; color: var(--text-secondary); max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="{{ row.thesis_title or '' }}">
+                                {{ row.thesis_title or '—' }}
+                            </td>
+                            <td>
+                                <select name="examiner_id" 
+                                        hx-post="/matching/update-assignment" 
+                                        hx-trigger="change" 
+                                        hx-target="#diagnostics-container" 
+                                        hx-vals='{"student_id": {{ row.student_id }}, "role": "internal"}' 
+                                        class="assign-select">
+                                    <option value="">-- Unassigned --</option>
+                                    {% for ex in internal_examiners %}
+                                    <option value="{{ ex.examiner_id }}" {% if ex.examiner_id == row.internal_id %}selected{% endif %}>
+                                        {{ ex.full_name }} (rem {{ ex.limit_n - ex.assigned_count }})
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </td>
+                            <td>
+                                <select name="examiner_id" 
+                                        hx-post="/matching/update-assignment" 
+                                        hx-trigger="change" 
+                                        hx-target="#diagnostics-container" 
+                                        hx-vals='{"student_id": {{ row.student_id }}, "role": "external"}' 
+                                        class="assign-select">
+                                    <option value="">-- Unassigned --</option>
+                                    {% for ex in external_examiners %}
+                                    <option value="{{ ex.examiner_id }}" {% if ex.examiner_id == row.external_id %}selected{% endif %}>
+                                        {{ ex.full_name }} (rem {{ ex.limit_n - ex.assigned_count }})
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </td>
+                            <td>
+                                <div style="display: flex; flex-direction: column; gap: 2px;">
+                                    <div>Score: <strong style="color: var(--accent);">{{ row.overall_score }}%</strong></div>
+                                    <div style="font-size: 0.75rem; color: var(--text-muted);">Pen: {{ row.total_penalty }}</div>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    {% else %}
+                        <tr>
+                            <td colspan="6" style="padding: 30px; text-align: center; color: var(--text-muted);">
+                                No student allocation assignments found. Try running the allocations solver first!
+                            </td>
+                        </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Card 2: Examiner Workloads -->
+    <div class="card" style="grid-column: span 2;">
+        <div class="card-title">Examiner Workload vs Limits</div>
+        <p class="subtitle" style="margin-bottom: 16px;">
+            Verify examiner capacities. Remaining slots are color-coded to highlight capacity status.
+        </p>
+        
+        <div class="workloads-container" style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+            <!-- Internal Examiners Workload -->
+            <div>
+                <h4 style="margin: 0 0 8px 0; font-size: 0.85rem; color: var(--accent-color); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Internal Examiners</h4>
+                <div style="overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); background-color: var(--bg-primary);">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Examiner</th>
+                                <th style="width: 60px;">Limit</th>
+                                <th style="width: 80px;">Assigned</th>
+                                <th style="width: 100px;">Remaining</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in workload_rows if row.is_internal %}
+                            <tr>
+                                <td style="font-weight: 500; font-size: 0.85rem;">{{ row.examiner_name }}</td>
+                                <td>{{ row.limit_n }}</td>
+                                <td>{{ row.assigned }}</td>
+                                <td>
+                                    {% if row.remaining < 0 %}
+                                    <span class="badge badge-danger" style="font-weight: bold;">{{ row.remaining }} (overlimit)</span>
+                                    {% elif row.remaining == 0 %}
+                                    <span class="badge badge-warning">{{ row.remaining }}</span>
+                                    {% else %}
+                                    <span class="badge badge-success">{{ row.remaining }}</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <!-- External Examiners Workload -->
+            <div>
+                <h4 style="margin: 0 0 8px 0; font-size: 0.85rem; color: var(--warning-color, #f59e0b); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">External Examiners</h4>
+                <div style="overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); background-color: var(--bg-primary);">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Examiner</th>
+                                <th style="width: 60px;">Limit</th>
+                                <th style="width: 80px;">Assigned</th>
+                                <th style="width: 100px;">Remaining</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in workload_rows if not row.is_internal %}
+                            <tr>
+                                <td style="font-weight: 500; font-size: 0.85rem;">{{ row.examiner_name }}</td>
+                                <td>{{ row.limit_n }}</td>
+                                <td>{{ row.assigned }}</td>
+                                <td>
+                                    {% if row.remaining < 0 %}
+                                    <span class="badge badge-danger" style="font-weight: bold;">{{ row.remaining }} (overlimit)</span>
+                                    {% elif row.remaining == 0 %}
+                                    <span class="badge badge-warning">{{ row.remaining }}</span>
+                                    {% else %}
+                                    <span class="badge badge-success">{{ row.remaining }}</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Alert for notifications if any changes were made -->
+{% if alert_message %}
+<div id="diagnostics-alert" hx-swap-oob="true">
+    <div class="alert {% if alert_success %}alert-success{% else %}alert-danger{% endif %}" style="position: fixed; bottom: 20px; right: 20px; z-index: 1000; box-shadow: 0 4px 20px rgba(0,0,0,0.3); min-width: 300px;">
+        {{ alert_message }}
+    </div>
+    <script>
+        setTimeout(function() {
+            var el = document.getElementById('diagnostics-alert');
+            if (el) el.innerHTML = '';
+        }, 3000);
+    </script>
+</div>
+{% endif %}

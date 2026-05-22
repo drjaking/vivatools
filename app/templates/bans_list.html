@@ -1,0 +1,38 @@
+<!-- app/templates/bans_list.html -->
+<div style="max-height: 300px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius-sm);">
+    {% if bans %}
+    <table id="bans-table">
+        <thead>
+            <tr>
+                <th class="sortable" onclick="sortBansTable(0)">Student</th>
+                <th class="sortable" onclick="sortBansTable(1)">Examiner</th>
+                <th class="sortable" onclick="sortBansTable(2)">Reason</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for ban in bans %}
+            <tr>
+                <td>{{ ban.student_name }}</td>
+                <td>{{ ban.examiner_name }}</td>
+                <td style="color: var(--text-secondary); font-size: 0.85rem;">{{ ban.reason or '—' }}</td>
+                <td>
+                    <button hx-post="/constraints/remove-ban" 
+                            hx-vals='{"student_id": {{ ban.student_id }}, "examiner_id": {{ ban.examiner_id }}}'
+                            hx-target="#bans-list-container"
+                            class="btn btn-danger btn-sm"
+                            style="padding: 2px 6px; font-size: 0.75rem;">
+                        Remove
+                    </button>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    {% else %}
+    <div style="padding: 20px; text-align: center; color: var(--text-muted);">
+        No active conflict bans in database.
+    </div>
+    {% endif %}
+</div>
