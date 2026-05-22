@@ -44,34 +44,74 @@
                                 {{ row.thesis_title or '—' }}
                             </td>
                             <td>
-                                <select name="examiner_id" 
-                                        hx-post="/matching/update-assignment" 
-                                        hx-trigger="change" 
-                                        hx-target="#diagnostics-container" 
-                                        hx-vals='{"student_id": {{ row.student_id }}, "role": "internal"}' 
-                                        class="assign-select">
-                                    <option value="">-- Unassigned --</option>
-                                    {% for ex in internal_examiners %}
-                                    <option value="{{ ex.examiner_id }}" {% if ex.examiner_id == row.internal_id %}selected{% endif %}>
-                                        {{ ex.full_name }} (rem {{ ex.limit_n - ex.assigned_count }})
-                                    </option>
-                                    {% endfor %}
-                                </select>
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <select name="examiner_id" 
+                                            hx-post="/matching/update-assignment" 
+                                            hx-trigger="change" 
+                                            hx-target="#diagnostics-container" 
+                                            hx-vals='{"student_id": {{ row.student_id }}, "role": "internal"}' 
+                                            class="assign-select"
+                                            style="flex: 1;">
+                                        <option value="">-- Unassigned --</option>
+                                        {% for ex in internal_examiners %}
+                                        <option value="{{ ex.examiner_id }}" {% if ex.examiner_id == row.internal_id %}selected{% endif %}>
+                                            {{ ex.full_name }} (rem {{ ex.limit_n - ex.assigned_count }})
+                                        </option>
+                                        {% endfor %}
+                                    </select>
+                                    {% if row.internal_top_3 %}
+                                    <div class="tooltip-wrapper">
+                                        <span class="info-badge">ℹ️</span>
+                                        <div class="tooltip-content">
+                                            <div class="tooltip-title">Top 3 Matching Categories</div>
+                                            <ul class="tooltip-list">
+                                                {% for cat in row.internal_top_3 %}
+                                                <li class="tooltip-item">
+                                                    <span class="badge-comp badge-comp-{{ cat.competence }}">{{ cat.competence }}</span>
+                                                    <span class="tooltip-cat-name" title="{{ cat.name }}">{{ cat.name }}</span>
+                                                    <span class="tooltip-cat-weight">({{ cat.weight }})</span>
+                                                </li>
+                                                {% endfor %}
+                                            </ul>
+                                        </div>
+                                    </div>
+                                    {% endif %}
+                                </div>
                             </td>
                             <td>
-                                <select name="examiner_id" 
-                                        hx-post="/matching/update-assignment" 
-                                        hx-trigger="change" 
-                                        hx-target="#diagnostics-container" 
-                                        hx-vals='{"student_id": {{ row.student_id }}, "role": "external"}' 
-                                        class="assign-select">
-                                    <option value="">-- Unassigned --</option>
-                                    {% for ex in external_examiners %}
-                                    <option value="{{ ex.examiner_id }}" {% if ex.examiner_id == row.external_id %}selected{% endif %}>
-                                        {{ ex.full_name }} (rem {{ ex.limit_n - ex.assigned_count }})
-                                    </option>
-                                    {% endfor %}
-                                </select>
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <select name="examiner_id" 
+                                            hx-post="/matching/update-assignment" 
+                                            hx-trigger="change" 
+                                            hx-target="#diagnostics-container" 
+                                            hx-vals='{"student_id": {{ row.student_id }}, "role": "external"}' 
+                                            class="assign-select"
+                                            style="flex: 1;">
+                                        <option value="">-- Unassigned --</option>
+                                        {% for ex in external_examiners %}
+                                        <option value="{{ ex.examiner_id }}" {% if ex.examiner_id == row.external_id %}selected{% endif %}>
+                                            {{ ex.full_name }} (rem {{ ex.limit_n - ex.assigned_count }})
+                                        </option>
+                                        {% endfor %}
+                                    </select>
+                                    {% if row.external_top_3 %}
+                                    <div class="tooltip-wrapper">
+                                        <span class="info-badge">ℹ️</span>
+                                        <div class="tooltip-content">
+                                            <div class="tooltip-title">Top 3 Matching Categories</div>
+                                            <ul class="tooltip-list">
+                                                {% for cat in row.external_top_3 %}
+                                                <li class="tooltip-item">
+                                                    <span class="badge-comp badge-comp-{{ cat.competence }}">{{ cat.competence }}</span>
+                                                    <span class="tooltip-cat-name" title="{{ cat.name }}">{{ cat.name }}</span>
+                                                    <span class="tooltip-cat-weight">({{ cat.weight }})</span>
+                                                </li>
+                                                {% endfor %}
+                                            </ul>
+                                        </div>
+                                    </div>
+                                    {% endif %}
+                                </div>
                             </td>
                             <td>
                                 <div style="display: flex; flex-direction: column; gap: 2px;">

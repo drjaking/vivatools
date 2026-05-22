@@ -6,22 +6,41 @@
 <div class="card">
     <div class="card-title">Solver Execution Control</div>
     <p class="subtitle" style="margin-bottom: 20px;">
-        Run the Google OR-Tools CP-SAT solver to compute optimal thesis-examiner pairings based on default weights and limits constraints.
+        Run the Google OR-Tools CP-SAT solver to compute optimal thesis-examiner pairings using weights and limits constraints.
     </p>
+
+    <!-- Information box for default weights explanation -->
+    <div style="background-color: rgba(99, 102, 241, 0.05); border: 1px solid rgba(99, 102, 241, 0.15); border-radius: var(--radius-sm); padding: 16px; margin-bottom: 20px; font-size: 0.9rem;">
+        <h4 style="color: #a5b4fc; margin-bottom: 8px; font-size: 0.95rem; font-weight: 600; display: flex; align-items: center; gap: 6px;">
+            <span>ℹ️</span> Solver Penalty & Weights Information
+        </h4>
+        <p style="color: var(--text-secondary); margin-bottom: 8px; line-height: 1.4;">
+            The solver searches for assignments that minimize total penalty points. Penalties are calculated based on examiner competence levels for each student's required thesis categories (multiplied by the category weight):
+        </p>
+        <ul style="color: var(--text-secondary); margin-left: 20px; margin-bottom: 8px; line-height: 1.4;">
+            <li><strong>'Can' Competence:</strong> 0 penalty points (optimal match).</li>
+            <li><strong>'Could' Competence:</strong> Incurs the 'Could' weight penalty (Default: 3).</li>
+            <li><strong>'Cannot' Competence:</strong> Incurs the 'Cannot' weight penalty (Default: 10).</li>
+            <li><strong>Group Mismatch:</strong> Incurs a penalty (Default: 5) if coupled projects do not share the same examiner.</li>
+        </ul>
+        <p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 4px; line-height: 1.4;">
+            <em>Note: If a student's thesis category has a specific weight set in constraints, it scales these penalties. Otherwise, the category's default weight (from the Constraints tab) is used.</em>
+        </p>
+    </div>
     
     <form hx-post="/matching/run-solver" hx-target="#solver-console" hx-indicator="#solver-run-indicator">
         <div class="grid-3" style="margin-bottom: 16px;">
             <div class="form-group">
-                <label>Weight for 'Could' Competence</label>
-                <input type="number" name="weight_could" value="3" required>
+                <label>Weight for 'Could' Competence (Default: 3)</label>
+                <input type="number" name="weight_could" value="3" required min="0">
             </div>
             <div class="form-group">
-                <label>Weight for 'Cannot' Competence</label>
-                <input type="number" name="weight_cannot" value="10" required>
+                <label>Weight for 'Cannot' Competence (Default: 10)</label>
+                <input type="number" name="weight_cannot" value="10" required min="0">
             </div>
             <div class="form-group">
-                <label>Weight for Group Mismatch</label>
-                <input type="number" name="weight_group_miss" value="5" required>
+                <label>Weight for Group Mismatch (Default: 5)</label>
+                <input type="number" name="weight_group_miss" value="5" required min="0">
             </div>
         </div>
         <div class="grid-2" style="margin-bottom: 16px;">

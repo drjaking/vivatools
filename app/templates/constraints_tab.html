@@ -10,7 +10,7 @@
         <div class="card">
             <div class="card-title">Default Weights per Competence</div>
             <p class="subtitle" style="margin-bottom: 16px;">
-                Specify the default penalty weight for mismatching student requirements against examiner competences.
+                Specify the default penalty weight for mismatching student requirements against examiner competences. Empty values fall back to a default weight of <strong>1.00</strong>.
             </p>
             <form hx-post="/constraints/save-weights" hx-target="#weights-result">
                 <div style="max-height: 400px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); margin-bottom: 16px;">
@@ -25,8 +25,8 @@
                             {% for cat in categories %}
                             <tr>
                                 <td>{{ cat.name }}</td>
-                                <td style="width: 120px;">
-                                    <input type="number" step="0.01" name="weight_{{ cat.id }}" value="{{ cat.default_weight }}" style="padding: 4px 8px;">
+                                <td style="width: 150px;">
+                                    <input type="number" step="0.01" name="weight_{{ cat.id }}" value="{% if cat.default_weight is not none %}{{ cat.default_weight }}{% endif %}" placeholder="1.00 (Default)" style="padding: 4px 8px;">
                                 </td>
                             </tr>
                             {% endfor %}

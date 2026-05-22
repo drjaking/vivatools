@@ -37,6 +37,7 @@ CREATE TABLE examiners (
     full_name     TEXT        UNIQUE NOT NULL,
     examiner_type TEXT        NOT NULL
         CHECK (examiner_type IN ('internal', 'external')),
+    email         TEXT,
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -74,7 +75,7 @@ CREATE TABLE examiner_assignments (
 
 CREATE TABLE examiner_limits (
     examiner_id   INT  PRIMARY KEY REFERENCES examiners ON DELETE CASCADE,
-    limit_n       INT  NOT NULL CHECK (limit_n > 0)
+    limit_n       INT  NOT NULL CHECK (limit_n >= 0)
 );
 
 /* ---------- 6.  Conflict-of-interest exclusions ----------------- */

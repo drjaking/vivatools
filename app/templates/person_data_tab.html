@@ -32,6 +32,32 @@
                    style="width: 100%; padding: 10px 14px; background-color: var(--bg-primary); border: 1px solid var(--border);">
         </div>
 
+        <!-- Quick Add Examiner Form (only visible when examiners tab is active) -->
+        <div id="quick-add-examiner-container" style="display: none; margin-bottom: 16px; padding: 14px; background-color: rgba(255,255,255,0.015); border: 1px dashed var(--border); border-radius: var(--radius-md);">
+            <div style="font-size: 0.8rem; font-weight: 600; text-transform: uppercase; color: var(--accent); letter-spacing: 0.5px; margin-bottom: 10px; display: flex; align-items: center; gap: 6px;">
+                <span>⚡</span> Quick Add Examiner
+            </div>
+            <form hx-post="/person-data/quick-add-examiner" 
+                  hx-target="#edit-panel" 
+                  hx-on:htmx:after-request="if(event.detail.successful) this.reset()"
+                  style="display: flex; gap: 8px; flex-wrap: wrap; width: 100%;">
+                <div style="flex: 2; min-width: 180px;">
+                    <input type="text" name="full_name" placeholder="Full Name" required 
+                           style="width: 100%; padding: 8px 12px; background-color: var(--bg-primary); border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 0.85rem;">
+                </div>
+                <div style="flex: 1; min-width: 110px;">
+                    <select name="examiner_type" required 
+                            style="width: 100%; padding: 8px 12px; background-color: var(--bg-primary); border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 0.85rem; height: 38px; cursor: pointer;">
+                        <option value="external" selected>External</option>
+                        <option value="internal">Internal</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-primary" style="padding: 8px 16px; font-size: 0.85rem; height: 38px; border-radius: var(--radius-sm); font-weight: 500;">
+                    Add Examiner
+                </button>
+            </form>
+        </div>
+
         <!-- Table Container -->
         <div id="list-container" style="flex: 1; overflow-y: auto; max-height: calc(100vh - 350px);">
             <!-- HTMX swaps list fragment here -->
@@ -59,15 +85,18 @@
         const btnStudents = document.getElementById('sub-tab-students');
         const btnExaminers = document.getElementById('sub-tab-examiners');
         const searchInput = document.getElementById('search-input');
+        const quickAddContainer = document.getElementById('quick-add-examiner-container');
         
         if (type === 'students') {
             btnStudents.className = "btn btn-primary btn-sm";
             btnExaminers.className = "btn btn-secondary btn-sm";
             searchInput.placeholder = "Search students by name, project title...";
+            if (quickAddContainer) quickAddContainer.style.display = "none";
         } else {
             btnStudents.className = "btn btn-secondary btn-sm";
             btnExaminers.className = "btn btn-primary btn-sm";
             searchInput.placeholder = "Search examiners by name...";
+            if (quickAddContainer) quickAddContainer.style.display = "block";
         }
         
         searchInput.value = "";

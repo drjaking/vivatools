@@ -16,3 +16,6 @@ env/
 # Local logs
 *.log
 diagnostics/
+
+# Scratch folder
+scratch/

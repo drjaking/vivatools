@@ -81,6 +81,7 @@ def startup_event():
         cur.execute("ALTER TABLE students ADD COLUMN IF NOT EXISTS methodology_other_desc TEXT;")
         cur.execute("ALTER TABLE students ADD COLUMN IF NOT EXISTS field_other_desc TEXT;")
         cur.execute("ALTER TABLE students ADD COLUMN IF NOT EXISTS additional_characteristics TEXT;")
+        cur.execute("ALTER TABLE examiners ADD COLUMN IF NOT EXISTS email TEXT;")
         
         # Ensure pending_mappings table exists
         cur.execute("""
@@ -107,6 +108,10 @@ def startup_event():
         # Drop group size trigger/function if it exists (no longer enforced)
         cur.execute("DROP TRIGGER IF EXISTS trg_project_group_size ON project_groups")
         cur.execute("DROP FUNCTION IF EXISTS check_group_size()")
+        
+        # Ensure examiner_limits table allows limit_n >= 0
+        cur.execute("ALTER TABLE examiner_limits DROP CONSTRAINT IF EXISTS examiner_limits_limit_n_check;")
+        cur.execute("ALTER TABLE examiner_limits ADD CONSTRAINT examiner_limits_limit_n_check CHECK (limit_n >= 0);")
         
         # 2. Fill missing examiner limits
         cur.execute("""
@@ -236,6 +241,7 @@ def commit_survey(import_mode: str = Form("add")):
             <strong>Success:</strong> Database tables successfully populated!
         </div>
         """
+        return HTMLResponse(content=html, headers={"HX-Trigger": "refreshVerificationCount, surveyCommitted, refreshVerificationCard"})
     else:
         html = f"""
         <div class="alert alert-danger">
@@ -243,7 +249,7 @@ def commit_survey(import_mode: str = Form("add")):
             <pre style="white-space: pre-wrap; font-family: monospace; font-size: 0.85rem; margin-top: 8px;">{msg}</pre>
         </div>
         """
-    return HTMLResponse(content=html)
+        return HTMLResponse(content=html)
 
 
 @app.post("/import/update-competences")
@@ -437,7 +443,7 @@ async def update_competences(
                 {'<br>'.join(summary_parts)}
             </div>
             """
-            return HTMLResponse(content=html, headers={"HX-Trigger": "refreshVerificationCount"})
+            return HTMLResponse(content=html, headers={"HX-Trigger": "refreshVerificationCount, refreshVerificationCard"})
         except Exception as e:
             conn.rollback()
             import traceback
@@ -810,6 +816,7 @@ def confirm_all_no_match(request: Request, relationship_type: str = Form(...)):
 
 @app.post("/import/verification/create-examiner")
 def create_examiner(
+    request: Request,
     mapping_id: int = Form(...),
     examiner_type: str = Form("external")
 ):
@@ -837,6 +844,16 @@ def create_examiner(
                 VALUES (%s, 3)
                 ON CONFLICT DO NOTHING
             """, (eid,))
+
+            # Initialize all competences to 'could' for this new examiner
+            cur.execute("SELECT category_id FROM categories")
+            cat_ids = [r[0] for r in cur.fetchall()]
+            for cid in cat_ids:
+                cur.execute("""
+                    INSERT INTO examiner_competences (examiner_id, category_id, competence)
+                    VALUES (%s, %s, 'could')
+                    ON CONFLICT (examiner_id, category_id) DO NOTHING
+                """, (eid, cid))
             
             # 2. Update mapping to point to the new examiner and set confidence to exact
             cur.execute("""
@@ -846,7 +863,9 @@ def create_examiner(
             """, (eid, mapping_id))
             
         conn.commit()
-        return HTMLResponse(content="", headers={"HX-Trigger": "refreshVerificationCount"})
+        response = get_verification_dashboard(request, active_tab="supervisor")
+        response.headers["HX-Trigger"] = "refreshVerificationCount"
+        return response
     except Exception as e:
         return HTMLResponse(content=f"Error: {str(e)}", status_code=500)
     finally:
@@ -856,7 +875,7 @@ def create_examiner(
 def export_templates():
     try:
         # Run export_contacts.py as a subprocess to keep the same environment structure
-        cmd = [".\\.venv\\Scripts\\python.exe", "export_contacts.py", "--dsn", DB_DSN]
+        cmd = [sys.executable, "export_contacts.py", "--dsn", DB_DSN]
         res = subprocess.run(cmd, capture_output=True, text=True)
         if res.returncode == 0:
             html = f'<div class="alert alert-success"><strong>Success:</strong> {res.stdout.strip()}</div>'
@@ -939,54 +958,49 @@ def get_constraints(request: Request):
     })
 
 @app.post("/constraints/save-weights")
-def save_weights(request: Request):
-    # Parse form data
-    form_data = request.query_params
-    conn = get_db_conn()
-    try:
-        with conn, conn.cursor() as cur:
-            # Note: request.form() is asynchronous. We read direct query params or form data.
-            # Let's write a robust way to fetch form keys
-            pass
-    except Exception:
-        pass
-    conn.close()
-
-# Overriding endpoint to handle form body asynchronously
-@app.post("/constraints/save-weights")
-async def save_weights_post(request: Request):
+async def save_weights(request: Request):
     form = await request.form()
     conn = get_db_conn()
     updated = 0
-    with conn, conn.cursor() as cur:
-        for k, v in form.items():
-            if k.startswith("weight_"):
-                cat_id = int(k.replace("weight_", ""))
-                weight_val = float(v)
-                cur.execute("UPDATE categories SET default_weight = %s WHERE category_id = %s", (weight_val, cat_id))
-                updated += 1
-    conn.commit()
-    conn.close()
-    return HTMLResponse(content=f'<div class="alert alert-success" style="margin-top: 10px;">Successfully updated {updated} competence weights.</div>')
+    try:
+        with conn, conn.cursor() as cur:
+            for k, v in form.items():
+                if k.startswith("weight_"):
+                    cat_id = int(k.replace("weight_", ""))
+                    weight_val = float(v)
+                    cur.execute("UPDATE categories SET default_weight = %s WHERE category_id = %s", (weight_val, cat_id))
+                    updated += 1
+        conn.commit()
+        return HTMLResponse(content=f'<div class="alert alert-success" style="margin-top: 10px;">Successfully updated {updated} competence weights.</div>')
+    except Exception as e:
+        conn.rollback()
+        return HTMLResponse(content=f'<div class="alert alert-danger" style="margin-top: 10px;">Error updating weights: {str(e)}</div>')
+    finally:
+        conn.close()
 
 @app.post("/constraints/save-limits")
 async def save_limits(request: Request):
     form = await request.form()
     conn = get_db_conn()
     updated = 0
-    with conn, conn.cursor() as cur:
-        for k, v in form.items():
-            if k.startswith("limit_"):
-                ex_id = int(k.replace("limit_", ""))
-                limit_val = int(v)
-                cur.execute("""
-                    INSERT INTO examiner_limits (examiner_id, limit_n) VALUES (%s, %s)
-                    ON CONFLICT (examiner_id) DO UPDATE SET limit_n = EXCLUDED.limit_n;
-                """, (ex_id, limit_val))
-                updated += 1
-    conn.commit()
-    conn.close()
-    return HTMLResponse(content=f'<div class="alert alert-success" style="margin-top: 10px;">Successfully updated {updated} examiner capacity limits.</div>')
+    try:
+        with conn, conn.cursor() as cur:
+            for k, v in form.items():
+                if k.startswith("limit_"):
+                    ex_id = int(k.replace("limit_", ""))
+                    limit_val = int(v)
+                    cur.execute("""
+                        INSERT INTO examiner_limits (examiner_id, limit_n) VALUES (%s, %s)
+                        ON CONFLICT (examiner_id) DO UPDATE SET limit_n = EXCLUDED.limit_n;
+                    """, (ex_id, limit_val))
+                    updated += 1
+        conn.commit()
+        return HTMLResponse(content=f'<div class="alert alert-success" style="margin-top: 10px;">Successfully updated {updated} examiner capacity limits.</div>')
+    except Exception as e:
+        conn.rollback()
+        return HTMLResponse(content=f'<div class="alert alert-danger" style="margin-top: 10px;">Error updating capacity limits: {str(e)}</div>')
+    finally:
+        conn.close()
 
 @app.post("/constraints/add-ban")
 async def add_ban(request: Request, student_id: int = Form(...), examiner_id: int = Form(...), reason: str = Form("")):
@@ -1547,6 +1561,115 @@ async def post_examiner_edit(
         conn.close()
 
 
+@app.post("/person-data/quick-add-examiner", response_class=HTMLResponse)
+def post_quick_add_examiner(
+    request: Request,
+    full_name: str = Form(...),
+    examiner_type: str = Form(...)
+):
+    full_name_clean = full_name.strip()
+    if not full_name_clean:
+        return HTMLResponse(content='<div class="alert alert-danger" style="margin: 20px;">Name cannot be empty.</div>')
+    
+    conn = get_db_conn()
+    try:
+        with conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
+            # Check if examiner with that name already exists
+            cur.execute("SELECT examiner_id FROM examiners WHERE LOWER(full_name) = LOWER(%s)", (full_name_clean,))
+            duplicate = cur.fetchone()
+            if duplicate:
+                ex_id = duplicate['examiner_id']
+                cur.execute("""
+                    SELECT ex.examiner_id, ex.full_name, ex.email, ex.examiner_type, ex.created_at, COALESCE(el.limit_n, 3) AS limit_n,
+                           (SELECT COUNT(*) FROM examiner_assignments WHERE examiner_id = ex.examiner_id) AS active_assignments
+                    FROM examiners ex
+                    LEFT JOIN examiner_limits el USING (examiner_id)
+                    WHERE ex.examiner_id = %s
+                """, (ex_id,))
+                examiner = cur.fetchone()
+                
+                cur.execute("""
+                    SELECT c.category_id, c.name, ec.competence
+                    FROM categories c
+                    LEFT JOIN examiner_competences ec ON c.category_id = ec.category_id AND ec.examiner_id = %s
+                    ORDER BY c.name
+                """, (ex_id,))
+                categories = cur.fetchall()
+                
+                return templates.TemplateResponse(
+                    request, 
+                    "examiner_edit_form.html", 
+                    {
+                        "examiner": examiner, 
+                        "categories": categories,
+                        "active_edit_tab": "basic",
+                        "alert_message": f"Error: An examiner named '{full_name_clean}' already exists.", 
+                        "alert_success": False
+                    }
+                )
+
+            # Insert new examiner
+            cur.execute("""
+                INSERT INTO examiners (full_name, examiner_type)
+                VALUES (%s, %s)
+                RETURNING examiner_id
+            """, (full_name_clean, examiner_type))
+            examiner_id = cur.fetchone()['examiner_id']
+
+            # Initialize limit to 3
+            cur.execute("""
+                INSERT INTO examiner_limits (examiner_id, limit_n)
+                VALUES (%s, 3)
+                ON CONFLICT (examiner_id) DO UPDATE SET limit_n = EXCLUDED.limit_n
+            """, (examiner_id,))
+
+            # Initialize all competences to 'could'
+            cur.execute("SELECT category_id FROM categories")
+            cat_ids = [r['category_id'] for r in cur.fetchall()]
+            for cid in cat_ids:
+                cur.execute("""
+                    INSERT INTO examiner_competences (examiner_id, category_id, competence)
+                    VALUES (%s, %s, 'could')
+                    ON CONFLICT (examiner_id, category_id) DO NOTHING
+                """, (examiner_id, cid))
+
+            # Fetch the newly created examiner
+            cur.execute("""
+                SELECT ex.examiner_id, ex.full_name, ex.email, ex.examiner_type, ex.created_at, COALESCE(el.limit_n, 3) AS limit_n,
+                       (SELECT COUNT(*) FROM examiner_assignments WHERE examiner_id = ex.examiner_id) AS active_assignments
+                FROM examiners ex
+                LEFT JOIN examiner_limits el USING (examiner_id)
+                WHERE ex.examiner_id = %s
+            """, (examiner_id,))
+            examiner = cur.fetchone()
+
+            cur.execute("""
+                SELECT c.category_id, c.name, ec.competence
+                FROM categories c
+                LEFT JOIN examiner_competences ec ON c.category_id = ec.category_id AND ec.examiner_id = %s
+                ORDER BY c.name
+            """, (examiner_id,))
+            categories = cur.fetchall()
+
+        headers = {"HX-Trigger": "refreshList"}
+        return templates.TemplateResponse(
+            request, 
+            "examiner_edit_form.html", 
+            {
+                "examiner": examiner, 
+                "categories": categories,
+                "active_edit_tab": "basic",
+                "alert_message": f"Successfully created new examiner '{full_name_clean}'.", 
+                "alert_success": True
+            },
+            headers=headers
+        )
+    except Exception as e:
+        return HTMLResponse(content=f'<div class="alert alert-danger" style="margin: 20px;">Error creating examiner: {str(e)}</div>')
+    finally:
+        conn.close()
+
+
 @app.post("/person-data/delete-student", response_class=HTMLResponse)
 async def delete_student(student_id: int = Form(...)):
     conn = get_db_conn()
@@ -1631,6 +1754,26 @@ async def delete_examiner(examiner_id: int = Form(...)):
 # ===========================================================================
 # TAB 3: MATCHING AND DIAGNOSTICS
 # ===========================================================================
+def get_top_matching_categories(student, examiner, cats):
+    if not student or not examiner:
+        return []
+    comp_ranks = {'can': 0, 'could': 1, 'cannot': 2}
+    matches = []
+    for cid, raw_weight in student.categories.items():
+        cat = cats.get(cid)
+        if not cat:
+            continue
+        weight = raw_weight if (raw_weight is not None and raw_weight > 0) else cat.default_weight
+        lvl = examiner.competences.get(cid, 'cannot')
+        matches.append({
+            'name': cat.name,
+            'competence': lvl,
+            'weight': f"{weight:g}"
+        })
+    matches.sort(key=lambda m: (comp_ranks.get(m['competence'], 2), -float(m['weight']), m['name'].lower()))
+    return matches[:3]
+
+
 def fetch_tab3_data(alert_message: str = "", alert_success: bool = True):
     conn = get_db_conn()
     with conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -1677,6 +1820,9 @@ def fetch_tab3_data(alert_message: str = "", alert_success: bool = True):
             overall_score = round((i_score + e_score) / 2, 1) if (iex_obj or eex_obj) else 0.0
             total_penalty = round(i_pen + e_pen, 2)
             
+            internal_top_3 = get_top_matching_categories(st_obj, iex_obj, cats)
+            external_top_3 = get_top_matching_categories(st_obj, eex_obj, cats)
+            
             student_rows.append({
                 "student_id": sid,
                 "student_name": db_row.get("full_name", st_obj.name),
@@ -1686,7 +1832,9 @@ def fetch_tab3_data(alert_message: str = "", alert_success: bool = True):
                 "internal_id": ieid,
                 "external_id": eeid,
                 "overall_score": overall_score,
-                "total_penalty": total_penalty
+                "total_penalty": total_penalty,
+                "internal_top_3": internal_top_3,
+                "external_top_3": external_top_3
             })
             
         # Examiner workloads
@@ -1756,7 +1904,7 @@ async def run_solver(
 ):
     try:
         cmd = [
-            ".\\.venv\\Scripts\\python.exe",
+            sys.executable,
             "matching_solver_2.py",
             "--dsn", DB_DSN,
             "--weight-could", str(weight_could),
@@ -2079,7 +2227,7 @@ async def preview_mail(student_id: int = Form(...)):
 @app.post("/mail-merge/run/trainee")
 def run_trainee_merge():
     try:
-        cmd = [".\\.venv\\Scripts\\python.exe", "trainee_email_initial.py", "--dsn", DB_DSN]
+        cmd = [sys.executable, "trainee_email_initial.py", "--dsn", DB_DSN]
         res = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
         output = res.stdout + "\n" + res.stderr
         status_msg = "SUCCESS" if res.returncode == 0 else "FAILED"
@@ -2090,7 +2238,7 @@ def run_trainee_merge():
 @app.post("/mail-merge/run/internal")
 def run_internal_merge():
     try:
-        cmd = [".\\.venv\\Scripts\\python.exe", "intexaminer_email1.py", "--dsn", DB_DSN]
+        cmd = [sys.executable, "intexaminer_email1.py", "--dsn", DB_DSN]
         res = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
         output = res.stdout + "\n" + res.stderr
         status_msg = "SUCCESS" if res.returncode == 0 else "FAILED"
@@ -2101,7 +2249,7 @@ def run_internal_merge():
 @app.post("/mail-merge/run/triad")
 def run_triad_merge():
     try:
-        cmd = [".\\.venv\\Scripts\\python.exe", "triad_emailer2.py", "--dsn", DB_DSN]
+        cmd = [sys.executable, "triad_emailer2.py", "--dsn", DB_DSN]
         res = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
         output = res.stdout + "\n" + res.stderr
         status_msg = "SUCCESS" if res.returncode == 0 else "FAILED"

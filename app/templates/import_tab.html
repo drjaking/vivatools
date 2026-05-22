@@ -62,51 +62,11 @@
     <!-- Right Side Panel: Other Ingestions & Verification -->
     <div>
         <!-- Card 2: Interactive Verification Dashboard -->
-        <div class="card" id="verification-card" hx-get="/import/verification-dashboard" hx-trigger="load, refreshVerificationCount from:body">
+        <div class="card" id="verification-card" hx-get="/import/verification-dashboard" hx-trigger="load, reloadVerificationCard">
             <div class="card-title">Pending Mappings Verification</div>
             <div style="display: flex; align-items: center; justify-content: center; padding: 40px; color: var(--text-secondary);">
                 <span class="spinner" style="margin-right: 10px;"></span> Loading pending verification mappings...
             </div>
-        </div>
-
-        <!-- Card 3: Competence Re-Import -->
-        <div class="card" style="border: 1px solid rgba(56, 189, 248, 0.25); background-color: rgba(56, 189, 248, 0.02);">
-            <div class="card-title" style="color: #38bdf8;">
-                <span>Competence Re-Import</span>
-                <span class="badge" style="background-color: rgba(56, 189, 248, 0.15); color: #38bdf8; font-size: 0.7rem;">Additive</span>
-            </div>
-            <p class="subtitle" style="margin-bottom: 16px;">
-                Re-upload updated Internal and External competence spreadsheets to add new examiners or refresh existing competence endorsements.
-                This does <strong>not</strong> modify students, thesis categories, bans, groups, or assignments.
-                Any previously unresolved supervisor mappings will be automatically re-matched against the updated examiner list.
-            </p>
-            <form hx-post="/import/update-competences" hx-encoding="multipart/form-data" hx-target="#competence-reimport-result" hx-indicator="#comp-reimport-indicator">
-                <div class="form-group" style="margin-bottom: 10px;">
-                    <label style="font-size: 0.82rem; font-weight: 500;">Internal Competences Excel (.xlsx)</label>
-                    <div class="upload-zone" style="padding: 10px;">
-                        <span class="upload-icon" style="font-size: 1.2rem;">📥</span>
-                        <div class="upload-text" style="font-size: 0.8rem;">Select Internal Excel file</div>
-                        <input type="file" name="file_internal">
-                    </div>
-                </div>
-                <div class="form-group" style="margin-bottom: 12px;">
-                    <label style="font-size: 0.82rem; font-weight: 500;">External Competences Excel (.xlsx)</label>
-                    <div class="upload-zone" style="padding: 10px;">
-                        <span class="upload-icon" style="font-size: 1.2rem;">📥</span>
-                        <div class="upload-text" style="font-size: 0.8rem;">Select External Excel file</div>
-                        <input type="file" name="file_external">
-                    </div>
-                </div>
-                <div style="display: flex; align-items: center; gap: 12px;">
-                    <button type="submit" class="btn btn-secondary btn-sm" style="border-color: #38bdf8; color: #38bdf8;">
-                        Update Competences
-                    </button>
-                    <span id="comp-reimport-indicator" class="htmx-indicator">
-                        <span class="spinner"></span> Importing...
-                    </span>
-                </div>
-            </form>
-            <div id="competence-reimport-result" style="margin-top: 15px;"></div>
         </div>
 
         <!-- Card 4: Outlook Contacts Export -->
@@ -146,6 +106,69 @@
             </div>
             <div id="reset-db-result" style="margin-top: 12px;"></div>
         </div>
-    </div>
 </div>
+
+<script>
+    function resetUploadZones(container) {
+        const uploadZones = container.querySelectorAll('.upload-zone');
+        uploadZones.forEach(uploadZone => {
+            const uploadText = uploadZone.querySelector('.upload-text');
+            if (uploadText && uploadZone.dataset.defaultText) {
+                uploadText.textContent = uploadZone.dataset.defaultText;
+                uploadText.style.color = '';
+                uploadText.style.fontWeight = '';
+            }
+        });
+    }
+
+    // Event listener to show selected file name in drag-and-drop / select zone
+    document.addEventListener('change', function(e) {
+        if (e.target && e.target.type === 'file') {
+            const fileInput = e.target;
+            const uploadZone = fileInput.closest('.upload-zone');
+            if (uploadZone) {
+                const uploadText = uploadZone.querySelector('.upload-text');
+                if (uploadText) {
+                    // Store default text if not already stored
+                    if (!uploadZone.dataset.defaultText) {
+                        uploadZone.dataset.defaultText = uploadText.textContent;
+                    }
+                    if (fileInput.files && fileInput.files[0]) {
+                        uploadText.textContent = '📄 ' + fileInput.files[0].name;
+                        uploadText.style.color = 'var(--success)';
+                        uploadText.style.fontWeight = '600';
+                    } else {
+                        uploadText.textContent = uploadZone.dataset.defaultText;
+                        uploadText.style.color = '';
+                        uploadText.style.fontWeight = '';
+                    }
+                }
+            }
+        }
+    });
+
+    // Reset upload zone text if parent form is reset
+    document.addEventListener('reset', function(e) {
+        if (e.target && e.target.tagName === 'FORM') {
+            resetUploadZones(e.target);
+        }
+    });
+
+    // Reset the forms and clear all upload texts when surveys are successfully committed
+    document.body.addEventListener('surveyCommitted', function() {
+        const forms = document.querySelectorAll('form');
+        forms.forEach(form => {
+            form.reset();
+            resetUploadZones(form);
+        });
+    });
+
+    // Listen for the custom event to reload the verification card
+    document.body.addEventListener('refreshVerificationCard', function() {
+        const card = document.getElementById('verification-card');
+        if (card) {
+            htmx.trigger(card, 'reloadVerificationCard');
+        }
+    });
+</script>
 {% endblock %}
