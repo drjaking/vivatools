@@ -38,6 +38,7 @@ CREATE TABLE examiners (
     examiner_type TEXT        NOT NULL
         CHECK (examiner_type IN ('internal', 'external')),
     email         TEXT,
+    has_dclinpsy  BOOLEAN     NOT NULL DEFAULT TRUE,
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 

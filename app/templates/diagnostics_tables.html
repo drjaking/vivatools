@@ -25,8 +25,11 @@
                 <tbody>
                     {% if student_rows %}
                         {% for row in student_rows %}
-                        <tr {% if row.is_pre_matched %}style="background-color: rgba(245, 158, 11, 0.04); border-left: 3px solid var(--warning);" {% elif row.is_deferred %}style="background-color: rgba(255, 255, 255, 0.02); opacity: 0.65;"{% endif %}>
+                        <tr {% if row.dclinpsy_missing %}style="background-color: rgba(239, 68, 68, 0.08); border-left: 3px solid var(--danger);" {% elif row.is_pre_matched %}style="background-color: rgba(245, 158, 11, 0.04); border-left: 3px solid var(--warning);" {% elif row.is_deferred %}style="background-color: rgba(255, 255, 255, 0.02); opacity: 0.65;"{% endif %}>
                             <td style="font-weight: 500;">
+                                {% if row.dclinpsy_missing %}
+                                <span title="Constraint Violation: Neither examiner has the DClinPsy qualification!" style="color: var(--danger); margin-right: 4px; cursor: help;">⚠️</span>
+                                {% endif %}
                                 {% if row.is_pre_matched %}
                                 <span title="Pre-matched (Locked in place)" style="color: var(--warning); margin-right: 4px;">🔒</span>
                                 {% endif %}
@@ -55,7 +58,7 @@
                                         <option value="">-- Unassigned --</option>
                                         {% for ex in internal_examiners %}
                                         <option value="{{ ex.examiner_id }}" {% if ex.examiner_id == row.internal_id %}selected{% endif %}>
-                                            {{ ex.full_name }} (rem {{ ex.limit_n - ex.assigned_count }})
+                                            {{ ex.full_name }}{% if ex.has_dclinpsy %} 🎓{% endif %} (rem {{ ex.limit_n - ex.assigned_count }})
                                         </option>
                                         {% endfor %}
                                     </select>
@@ -90,7 +93,7 @@
                                         <option value="">-- Unassigned --</option>
                                         {% for ex in external_examiners %}
                                         <option value="{{ ex.examiner_id }}" {% if ex.examiner_id == row.external_id %}selected{% endif %}>
-                                            {{ ex.full_name }} (rem {{ ex.limit_n - ex.assigned_count }})
+                                            {{ ex.full_name }}{% if ex.has_dclinpsy %} 🎓{% endif %} (rem {{ ex.limit_n - ex.assigned_count }})
                                         </option>
                                         {% endfor %}
                                     </select>

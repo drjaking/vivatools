@@ -42,6 +42,7 @@ class Examiner:
     is_internal: bool
     limit: int
     competences: Dict[int, str]
+    has_dclinpsy: bool
 
 # ---------------------------------------------------------------------------
 # Data ingestion
@@ -86,15 +87,17 @@ def load_examiners(cur, active_sids: Set[int]) -> Dict[int, Examiner]:
             pre_matched_counts[eid] += 1
 
     cur.execute("""
-        SELECT ex.examiner_id, ex.examiner_type, COALESCE(el.limit_n, 3) AS limit_n
+        SELECT ex.examiner_id, ex.examiner_type, ex.has_dclinpsy, COALESCE(el.limit_n, 3) AS limit_n
         FROM examiners ex
         LEFT JOIN examiner_limits el USING (examiner_id)
     """)
     limits = {}
     types = {}
-    for eid, etype, lim in cur.fetchall():
+    has_dclinpsy = {}
+    for eid, etype, dclinpsy, lim in cur.fetchall():
         limits[eid] = max(0, lim - pre_matched_counts[eid])
         types[eid] = (etype == "internal")
+        has_dclinpsy[eid] = bool(dclinpsy)
 
     cur.execute("SELECT examiner_id, category_id, competence FROM examiner_competences")
     comp: Dict[int, Dict[int, str]] = defaultdict(dict)
@@ -102,7 +105,7 @@ def load_examiners(cur, active_sids: Set[int]) -> Dict[int, Examiner]:
         comp[eid][cid] = level
 
     return {
-        eid: Examiner(eid, types[eid], limits[eid], comp[eid])
+        eid: Examiner(eid, types[eid], limits[eid], comp[eid], has_dclinpsy[eid])
         for eid in limits
     }
 
@@ -180,6 +183,11 @@ def build_model(
     for sid in students:
         model.Add(sum(x[(sid, eid)] for eid in internal_ids if (sid, eid) in x) == 1)
         model.Add(sum(x[(sid, eid)] for eid in external_ids if (sid, eid) in x) == 1)
+        
+        # Mandatory constraint: at least one assigned examiner must have DClinPsy
+        dclinpsy_vars = [x[(sid, eid)] for eid in examiners if (sid, eid) in x and examiners[eid].has_dclinpsy]
+        if dclinpsy_vars:
+            model.Add(sum(dclinpsy_vars) >= 1)
 
     # force pre-matched assignments
     for sid, st_pre in prematches.items():

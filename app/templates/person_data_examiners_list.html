@@ -14,7 +14,14 @@
             hx-target="#edit-panel" 
             style="cursor: pointer;"
             class="list-row">
-            <td style="font-weight: 500;">{{ ex.full_name }}</td>
+            <td style="font-weight: 500;">
+                <div style="display: flex; align-items: center; gap: 6px;">
+                    <span>{{ ex.full_name }}</span>
+                    {% if ex.has_dclinpsy %}
+                    <span title="DClinPsy Qualified" style="font-size: 0.62rem; font-weight: 600; padding: 1px 5px; background-color: rgba(52, 211, 153, 0.12); color: #34d399; border-radius: 3px; line-height: 1.2;">DClinPsy</span>
+                    {% endif %}
+                </div>
+            </td>
             <td>
                 {% if ex.examiner_type == 'internal' %}
                 <span class="badge" style="background-color: rgba(99, 102, 241, 0.1); color: #818cf8; font-size: 0.65rem; padding: 2px 6px;">Internal</span>

@@ -82,6 +82,7 @@ def startup_event():
         cur.execute("ALTER TABLE students ADD COLUMN IF NOT EXISTS field_other_desc TEXT;")
         cur.execute("ALTER TABLE students ADD COLUMN IF NOT EXISTS additional_characteristics TEXT;")
         cur.execute("ALTER TABLE examiners ADD COLUMN IF NOT EXISTS email TEXT;")
+        cur.execute("ALTER TABLE examiners ADD COLUMN IF NOT EXISTS has_dclinpsy BOOLEAN NOT NULL DEFAULT TRUE;")
         
         # Ensure pending_mappings table exists
         cur.execute("""
@@ -898,7 +899,7 @@ def fetch_tab2_data():
         
         # Examiners
         cur.execute("""
-            SELECT ex.examiner_id, ex.full_name, ex.examiner_type, COALESCE(el.limit_n, 3) AS limit_n
+            SELECT ex.examiner_id, ex.full_name, ex.examiner_type, ex.has_dclinpsy, COALESCE(el.limit_n, 3) AS limit_n
             FROM examiners ex
             LEFT JOIN examiner_limits el USING (examiner_id)
             ORDER BY ex.full_name
@@ -1199,7 +1200,7 @@ def get_person_data_list(request: Request, type: str = "students", search: Optio
                 if search and search.strip():
                     q = f"%{search.strip().lower()}%"
                     cur.execute("""
-                        SELECT ex.examiner_id, ex.full_name, ex.examiner_type, ex.email, COALESCE(el.limit_n, 3) AS limit_n,
+                        SELECT ex.examiner_id, ex.full_name, ex.examiner_type, ex.email, ex.has_dclinpsy, COALESCE(el.limit_n, 3) AS limit_n,
                                (SELECT COUNT(*) FROM examiner_assignments WHERE examiner_id = ex.examiner_id) AS active_assignments
                         FROM examiners ex
                         LEFT JOIN examiner_limits el USING (examiner_id)
@@ -1208,7 +1209,7 @@ def get_person_data_list(request: Request, type: str = "students", search: Optio
                     """, (q, q))
                 else:
                     cur.execute("""
-                        SELECT ex.examiner_id, ex.full_name, ex.examiner_type, ex.email, COALESCE(el.limit_n, 3) AS limit_n,
+                        SELECT ex.examiner_id, ex.full_name, ex.examiner_type, ex.email, ex.has_dclinpsy, COALESCE(el.limit_n, 3) AS limit_n,
                                (SELECT COUNT(*) FROM examiner_assignments WHERE examiner_id = ex.examiner_id) AS active_assignments
                         FROM examiners ex
                         LEFT JOIN examiner_limits el USING (examiner_id)
@@ -1428,7 +1429,7 @@ def get_examiner_edit(request: Request, examiner_id: int):
     try:
         with conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("""
-                SELECT ex.examiner_id, ex.full_name, ex.email, ex.examiner_type, ex.created_at, COALESCE(el.limit_n, 3) AS limit_n,
+                SELECT ex.examiner_id, ex.full_name, ex.email, ex.examiner_type, ex.has_dclinpsy, ex.created_at, COALESCE(el.limit_n, 3) AS limit_n,
                        (SELECT COUNT(*) FROM examiner_assignments WHERE examiner_id = ex.examiner_id) AS active_assignments
                 FROM examiners ex
                 LEFT JOIN examiner_limits el USING (examiner_id)
@@ -1472,6 +1473,7 @@ async def post_examiner_edit(
     
     form_data = await request.form()
     active_edit_tab = form_data.get("active_edit_tab", "basic")
+    has_dclinpsy_bool = (form_data.get("has_dclinpsy") == "yes")
     
     try:
         with conn, conn.cursor() as cur:
@@ -1491,9 +1493,10 @@ async def post_examiner_edit(
                         UPDATE examiners
                         SET full_name = %s,
                             email = %s,
-                            examiner_type = %s
+                            examiner_type = %s,
+                            has_dclinpsy = %s
                         WHERE examiner_id = %s
-                    """, (full_name.strip(), email.strip() if email and email.strip() else None, examiner_type, examiner_id))
+                    """, (full_name.strip(), email.strip() if email and email.strip() else None, examiner_type, has_dclinpsy_bool, examiner_id))
                     
                     cur.execute("""
                         INSERT INTO examiner_limits (examiner_id, limit_n)
@@ -1526,7 +1529,7 @@ async def post_examiner_edit(
     try:
         with conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("""
-                SELECT ex.examiner_id, ex.full_name, ex.email, ex.examiner_type, ex.created_at, COALESCE(el.limit_n, 3) AS limit_n,
+                SELECT ex.examiner_id, ex.full_name, ex.email, ex.examiner_type, ex.has_dclinpsy, ex.created_at, COALESCE(el.limit_n, 3) AS limit_n,
                        (SELECT COUNT(*) FROM examiner_assignments WHERE examiner_id = ex.examiner_id) AS active_assignments
                 FROM examiners ex
                 LEFT JOIN examiner_limits el USING (examiner_id)
@@ -1580,7 +1583,7 @@ def post_quick_add_examiner(
             if duplicate:
                 ex_id = duplicate['examiner_id']
                 cur.execute("""
-                    SELECT ex.examiner_id, ex.full_name, ex.email, ex.examiner_type, ex.created_at, COALESCE(el.limit_n, 3) AS limit_n,
+                    SELECT ex.examiner_id, ex.full_name, ex.email, ex.examiner_type, ex.has_dclinpsy, ex.created_at, COALESCE(el.limit_n, 3) AS limit_n,
                            (SELECT COUNT(*) FROM examiner_assignments WHERE examiner_id = ex.examiner_id) AS active_assignments
                     FROM examiners ex
                     LEFT JOIN examiner_limits el USING (examiner_id)
@@ -1635,7 +1638,7 @@ def post_quick_add_examiner(
 
             # Fetch the newly created examiner
             cur.execute("""
-                SELECT ex.examiner_id, ex.full_name, ex.email, ex.examiner_type, ex.created_at, COALESCE(el.limit_n, 3) AS limit_n,
+                SELECT ex.examiner_id, ex.full_name, ex.email, ex.examiner_type, ex.has_dclinpsy, ex.created_at, COALESCE(el.limit_n, 3) AS limit_n,
                        (SELECT COUNT(*) FROM examiner_assignments WHERE examiner_id = ex.examiner_id) AS active_assignments
                 FROM examiners ex
                 LEFT JOIN examiner_limits el USING (examiner_id)
@@ -1779,7 +1782,7 @@ def fetch_tab3_data(alert_message: str = "", alert_success: bool = True):
     with conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
         # Fetch examiners dropdown contents
         cur.execute("""
-            SELECT ex.examiner_id, ex.full_name, ex.examiner_type, COALESCE(el.limit_n, 3) AS limit_n,
+            SELECT ex.examiner_id, ex.full_name, ex.examiner_type, ex.has_dclinpsy, COALESCE(el.limit_n, 3) AS limit_n,
                    (SELECT COUNT(*) FROM examiner_assignments ea WHERE ea.examiner_id = ex.examiner_id) AS assigned_count
             FROM examiners ex
             LEFT JOIN examiner_limits el USING (examiner_id)
@@ -1820,6 +1823,11 @@ def fetch_tab3_data(alert_message: str = "", alert_success: bool = True):
             overall_score = round((i_score + e_score) / 2, 1) if (iex_obj or eex_obj) else 0.0
             total_penalty = round(i_pen + e_pen, 2)
             
+            # Check if both assigned examiners lack DClinPsy (mandatory constraint violation)
+            dclinpsy_missing = False
+            if iex_obj and eex_obj:
+                dclinpsy_missing = not (iex_obj.has_dclinpsy or eex_obj.has_dclinpsy)
+            
             internal_top_3 = get_top_matching_categories(st_obj, iex_obj, cats)
             external_top_3 = get_top_matching_categories(st_obj, eex_obj, cats)
             
@@ -1834,7 +1842,8 @@ def fetch_tab3_data(alert_message: str = "", alert_success: bool = True):
                 "overall_score": overall_score,
                 "total_penalty": total_penalty,
                 "internal_top_3": internal_top_3,
-                "external_top_3": external_top_3
+                "external_top_3": external_top_3,
+                "dclinpsy_missing": dclinpsy_missing
             })
             
         # Examiner workloads

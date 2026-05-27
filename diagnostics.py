@@ -46,12 +46,13 @@ class Student:
         self.categories = categories  # weight==0/None => use default
 
 class Examiner:
-    def __init__(self, eid: int, name: str, is_internal: bool, limit: int, competences: Dict[int, str]):
+    def __init__(self, eid: int, name: str, is_internal: bool, limit: int, competences: Dict[int, str], has_dclinpsy: bool = True):
         self.id = eid
         self.name = name
         self.is_internal = is_internal
         self.limit = limit
         self.competences = competences
+        self.has_dclinpsy = has_dclinpsy
 
 # ---------------------------------------------------------------------------
 # Data loading
@@ -80,15 +81,25 @@ def fetch_students(cur) -> Dict[int, Student]:
 def fetch_examiners(cur) -> Dict[int, Examiner]:
     cur.execute("SELECT examiner_id, limit_n FROM examiner_limits")
     limits = {eid: lim for eid, lim in cur.fetchall()}
-    cur.execute("SELECT examiner_id, examiner_type FROM examiners")
-    types = {eid: et == 'internal' for eid, et in cur.fetchall()}
+    cur.execute("SELECT examiner_id, examiner_type, has_dclinpsy FROM examiners")
+    ex_data = {row[0]: (row[1] == 'internal', bool(row[2])) for row in cur.fetchall()}
     cur.execute("SELECT examiner_id, category_id, competence FROM examiner_competences")
     comp: Dict[int, Dict[int, str]] = defaultdict(dict)
     for eid, cid, lvl in cur.fetchall():
         comp[eid][cid] = lvl
     cur.execute("SELECT examiner_id, full_name FROM examiners")
     names = {eid: n for eid, n in cur.fetchall()}
-    return {eid: Examiner(eid, names.get(eid, f"examiner {eid}"), types[eid], limits[eid], comp[eid]) for eid in limits}
+    return {
+        eid: Examiner(
+            eid,
+            names.get(eid, f"examiner {eid}"),
+            ex_data.get(eid, (True, True))[0],
+            limits.get(eid, 3),
+            comp[eid],
+            ex_data.get(eid, (True, True))[1]
+        )
+        for eid in names
+    }
 
 
 def fetch_assignments(cur) -> List[Tuple[int,int,int]]:
