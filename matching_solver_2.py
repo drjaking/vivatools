@@ -57,6 +57,10 @@ def load_students(cur) -> Dict[int, Student]:
     cur.execute("SELECT student_id FROM students WHERE COALESCE(deferred, FALSE) = TRUE")
     deferred_ids = {row[0] for row in cur.fetchall()}
 
+    # Fetch category names to identify "other" categories
+    cur.execute("SELECT category_id, name FROM categories")
+    cat_names = {cid: name for cid, name in cur.fetchall()}
+
     cur.execute(
         """
         SELECT student_id, category_id, in_scope, COALESCE(weight, 0)
@@ -66,6 +70,9 @@ def load_students(cur) -> Dict[int, Student]:
     tmp: Dict[int, Dict[int, float]] = defaultdict(dict)
     for sid, cid, in_scope, w in cur.fetchall():
         if in_scope and (sid not in deferred_ids):
+            cname = cat_names.get(cid, "")
+            if cname.endswith("_other") or cname == "other":
+                continue
             tmp[sid][cid] = float(w)
 
     cur.execute("SELECT group_id, student_id FROM project_groups")

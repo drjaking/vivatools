@@ -63,6 +63,9 @@ def fetch_categories(cur) -> Dict[int, Category]:
 
 
 def fetch_students(cur) -> Dict[int, Student]:
+    cur.execute("SELECT category_id, name FROM categories")
+    cat_names = {cid: name for cid, name in cur.fetchall()}
+    
     cur.execute(
         """
         SELECT student_id, category_id, in_scope, weight
@@ -72,6 +75,9 @@ def fetch_students(cur) -> Dict[int, Student]:
     tmp: Dict[int, Dict[int, float | None]] = defaultdict(dict)
     for sid, cid, in_scope, w in cur.fetchall():
         if in_scope:
+            cname = cat_names.get(cid, "")
+            if cname.endswith("_other") or cname == "other":
+                continue
             tmp[sid][cid] = None if w is None else float(w)
     cur.execute("SELECT student_id, full_name FROM students")
     names = {sid: n for sid, n in cur.fetchall()}
