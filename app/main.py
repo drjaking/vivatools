@@ -1813,20 +1813,44 @@ def fetch_tab3_data(alert_message: str = "", alert_success: bool = True):
             if not st_obj:
                 continue
             
-            i_score, i_pen = (0.0, 0.0)
-            if iex_obj:
-                i_score, i_pen = diagnostics.examiner_metrics(st_obj, iex_obj, cats, 3, 10)
-            e_score, e_pen = (0.0, 0.0)
-            if eex_obj:
-                e_score, e_pen = diagnostics.examiner_metrics(st_obj, eex_obj, cats, 3, 10)
-                
-            overall_score = round((i_score + e_score) / 2, 1) if (iex_obj or eex_obj) else 0.0
-            total_penalty = round(i_pen + e_pen, 2)
-            
             # Check if both assigned examiners lack DClinPsy (mandatory constraint violation)
             dclinpsy_missing = False
             if iex_obj and eex_obj:
                 dclinpsy_missing = not (iex_obj.has_dclinpsy or eex_obj.has_dclinpsy)
+                
+            # Check mixed qual/quant expertise coverage recommendation
+            mixed_mismatch = False
+            qual_id = next((cid for cid, cat in cats.items() if cat.name == 'methodology_qualitative'), None)
+            quant_id = next((cid for cid, cat in cats.items() if cat.name == 'methodology_quantitative'), None)
+            mixed_id = next((cid for cid, cat in cats.items() if cat.name == 'methodology_mixed_qual_quant'), None)
+
+            # Determine joint mixed level
+            if mixed_id and mixed_id in st_obj.categories:
+                p_level = diagnostics.get_joint_mixed_competence(iex_obj, eex_obj, qual_id, quant_id)
+                overrides = {mixed_id: p_level}
+                skip_id = mixed_id
+                w_mixed = diagnostics._effective_weight(st_obj.categories.get(mixed_id), cats[mixed_id])
+                mixed_pen = w_mixed * diagnostics._penalty(p_level, 3, 10)
+                mixed_mismatch = (p_level == 'cannot')
+            else:
+                overrides = None
+                skip_id = None
+                mixed_pen = 0.0
+
+            i_score, i_pen = (0.0, 0.0)
+            i_pen_non_mixed = 0.0
+            if iex_obj:
+                i_score, i_pen = diagnostics.examiner_metrics(st_obj, iex_obj, cats, 3, 10, override_competences=overrides)
+                i_pen_non_mixed = diagnostics.examiner_metrics(st_obj, iex_obj, cats, 3, 10, skip_mixed_id=skip_id)[1]
+            
+            e_score, e_pen = (0.0, 0.0)
+            e_pen_non_mixed = 0.0
+            if eex_obj:
+                e_score, e_pen = diagnostics.examiner_metrics(st_obj, eex_obj, cats, 3, 10, override_competences=overrides)
+                e_pen_non_mixed = diagnostics.examiner_metrics(st_obj, eex_obj, cats, 3, 10, skip_mixed_id=skip_id)[1]
+                
+            overall_score = round((i_score + e_score) / 2, 1) if (iex_obj and eex_obj) else (i_score or e_score)
+            total_penalty = round(i_pen_non_mixed + e_pen_non_mixed + mixed_pen, 2)
             
             internal_top_3 = get_top_matching_categories(st_obj, iex_obj, cats)
             external_top_3 = get_top_matching_categories(st_obj, eex_obj, cats)
@@ -1843,7 +1867,8 @@ def fetch_tab3_data(alert_message: str = "", alert_success: bool = True):
                 "total_penalty": total_penalty,
                 "internal_top_3": internal_top_3,
                 "external_top_3": external_top_3,
-                "dclinpsy_missing": dclinpsy_missing
+                "dclinpsy_missing": dclinpsy_missing,
+                "mixed_mismatch": mixed_mismatch
             })
             
         # Examiner workloads

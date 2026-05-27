@@ -134,6 +134,31 @@ def load_bans(cur) -> Set[Tuple[int, int]]:
     cur.execute("SELECT examiner_id, student_id FROM examiner_student_bans")
     return {(eid, sid) for eid, sid in cur.fetchall()}
 
+
+def patch_mixed_competence(examiners: Dict[int, Examiner], categories: Dict[int, Category]):
+    categories_by_name = {cat.name: cid for cid, cat in categories.items()}
+    qual_id = categories_by_name.get('methodology_qualitative')
+    quant_id = categories_by_name.get('methodology_quantitative')
+    mixed_id = categories_by_name.get('methodology_mixed_qual_quant')
+    
+    if qual_id is None or quant_id is None or mixed_id is None:
+        return
+        
+    for ex in examiners.values():
+        qual_lvl = ex.competences.get(qual_id, "cannot")
+        quant_lvl = ex.competences.get(quant_id, "cannot")
+        
+        if qual_lvl in ('can', 'could') and quant_lvl in ('can', 'could'):
+            if qual_lvl == 'can' and quant_lvl == 'can':
+                inferred_lvl = 'can'
+            else:
+                inferred_lvl = 'could'
+                
+            current_lvl = ex.competences.get(mixed_id, "cannot")
+            lvl_rank = {'can': 2, 'could': 1, 'cannot': 0}
+            if lvl_rank[inferred_lvl] > lvl_rank[current_lvl]:
+                ex.competences[mixed_id] = inferred_lvl
+
 # ---------------------------------------------------------------------------
 # Cost / penalty
 # ---------------------------------------------------------------------------
@@ -145,15 +170,19 @@ def competence_penalty(level: str, w_could: int, w_cannot: int) -> int:
 
 def student_examiner_cost(
     st: Student, ex: Examiner, categories: Dict[int, Category],
-    w_could: int, w_cannot: int
+    w_could: int, w_cannot: int,
+    skip_mixed_id: int | None = None
 ) -> int:
     total = 0.0
     for cid, weight in st.categories.items():
+        if cid == skip_mixed_id:
+            continue
         lvl = ex.competences.get(cid, "cannot")
         pen = competence_penalty(lvl, w_could, w_cannot)
         eff_w = weight if weight > 0 else categories[cid].default_weight
         total += eff_w * pen
     return int(round(total * 100))
+
 
 # ---------------------------------------------------------------------------
 # Model building
@@ -173,6 +202,11 @@ def build_model(
     internal_ids = {eid for eid, ex in examiners.items() if ex.is_internal}
     external_ids = set(examiners) - internal_ids
 
+    categories_by_name = {cat.name: cid for cid, cat in categories.items()}
+    qual_id = categories_by_name.get('methodology_qualitative')
+    quant_id = categories_by_name.get('methodology_quantitative')
+    mixed_id = categories_by_name.get('methodology_mixed_qual_quant')
+
     terms: List[cp_model.LinearExpr] = []
     for sid, st in students.items():
         st_pre = prematches.get(sid, {})
@@ -183,7 +217,7 @@ def build_model(
                 continue
             var = model.NewBoolVar(f"x_{sid}_{eid}")
             x[(sid, eid)] = var
-            cost = student_examiner_cost(st, ex, categories, w_could, w_cannot)
+            cost = student_examiner_cost(st, ex, categories, w_could, w_cannot, skip_mixed_id=mixed_id)
             terms.append(cost * var)
 
     # one internal & one external per student
@@ -195,6 +229,89 @@ def build_model(
         dclinpsy_vars = [x[(sid, eid)] for eid in examiners if (sid, eid) in x and examiners[eid].has_dclinpsy]
         if dclinpsy_vars:
             model.Add(sum(dclinpsy_vars) >= 1)
+
+        # Dynamic qualification constraint for mixed projects:
+        # A mixed project requires coverage of both qualitative and quantitative expertise.
+        if mixed_id and mixed_id in students[sid].categories:
+            if qual_id is not None and quant_id is not None:
+                # Find examiner ids for each level
+                qual_can_eids = [eid for eid, ex in examiners.items() if ex.competences.get(qual_id, 'cannot') == 'can']
+                qual_could_eids = [eid for eid, ex in examiners.items() if ex.competences.get(qual_id, 'cannot') == 'could']
+                quant_can_eids = [eid for eid, ex in examiners.items() if ex.competences.get(quant_id, 'cannot') == 'can']
+                quant_could_eids = [eid for eid, ex in examiners.items() if ex.competences.get(quant_id, 'cannot') == 'could']
+                
+                # Variables indicating if any examiner of that type is assigned to student sid
+                qual_can_vars = [x[(sid, eid)] for eid in qual_can_eids if (sid, eid) in x]
+                qual_could_vars = [x[(sid, eid)] for eid in qual_could_eids if (sid, eid) in x]
+                quant_can_vars = [x[(sid, eid)] for eid in quant_can_eids if (sid, eid) in x]
+                quant_could_vars = [x[(sid, eid)] for eid in quant_could_eids if (sid, eid) in x]
+                
+                # Boolean variables for coverage
+                has_qual_can = model.NewBoolVar(f"has_qual_can_{sid}")
+                has_qual_could = model.NewBoolVar(f"has_qual_could_{sid}")
+                has_quant_can = model.NewBoolVar(f"has_quant_can_{sid}")
+                has_quant_could = model.NewBoolVar(f"has_quant_could_{sid}")
+                
+                if qual_can_vars:
+                    model.Add(sum(qual_can_vars) >= 1).OnlyEnforceIf(has_qual_can)
+                    model.Add(sum(qual_can_vars) == 0).OnlyEnforceIf(has_qual_can.Not())
+                else:
+                    model.Add(has_qual_can == 0)
+                    
+                if qual_could_vars:
+                    model.Add(sum(qual_could_vars) >= 1).OnlyEnforceIf(has_qual_could)
+                    model.Add(sum(qual_could_vars) == 0).OnlyEnforceIf(has_qual_could.Not())
+                else:
+                    model.Add(has_qual_could == 0)
+                    
+                if quant_can_vars:
+                    model.Add(sum(quant_can_vars) >= 1).OnlyEnforceIf(has_quant_can)
+                    model.Add(sum(quant_can_vars) == 0).OnlyEnforceIf(has_quant_can.Not())
+                else:
+                    model.Add(has_quant_can == 0)
+                    
+                if quant_could_vars:
+                    model.Add(sum(quant_could_vars) >= 1).OnlyEnforceIf(has_quant_could)
+                    model.Add(sum(quant_could_vars) == 0).OnlyEnforceIf(has_quant_could.Not())
+                else:
+                    model.Add(has_quant_could == 0)
+                    
+                # qual is covered if has_qual_can or has_qual_could
+                qual_covered = model.NewBoolVar(f"qual_covered_{sid}")
+                model.AddBoolOr([has_qual_can, has_qual_could]).OnlyEnforceIf(qual_covered)
+                model.AddBoolAnd([has_qual_can.Not(), has_qual_could.Not()]).OnlyEnforceIf(qual_covered.Not())
+                
+                # quant is covered if has_quant_can or has_quant_could
+                quant_covered = model.NewBoolVar(f"quant_covered_{sid}")
+                model.AddBoolOr([has_quant_can, has_quant_could]).OnlyEnforceIf(quant_covered)
+                model.AddBoolAnd([has_quant_can.Not(), has_quant_could.Not()]).OnlyEnforceIf(quant_covered.Not())
+                
+                # mixed_covered = qual_covered AND quant_covered
+                mixed_covered = model.NewBoolVar(f"mixed_covered_{sid}")
+                model.AddBoolAnd([qual_covered, quant_covered]).OnlyEnforceIf(mixed_covered)
+                model.AddBoolOr([qual_covered.Not(), quant_covered.Not()]).OnlyEnforceIf(mixed_covered.Not())
+                
+                mixed_cannot = mixed_covered.Not()
+                
+                # mixed_can = has_qual_can AND has_quant_can
+                mixed_can = model.NewBoolVar(f"mixed_can_{sid}")
+                model.AddBoolAnd([has_qual_can, has_quant_can]).OnlyEnforceIf(mixed_can)
+                model.AddBoolOr([has_qual_can.Not(), has_quant_can.Not()]).OnlyEnforceIf(mixed_can.Not())
+                
+                # mixed_could = 1 - mixed_cannot - mixed_can
+                mixed_could = model.NewBoolVar(f"mixed_could_{sid}")
+                model.Add(mixed_cannot + mixed_could + mixed_can == 1)
+                
+                # Calculate penalties
+                eff_w = students[sid].categories[mixed_id]
+                if eff_w <= 0:
+                    eff_w = categories[mixed_id].default_weight
+                cannot_cost = int(round(eff_w * w_cannot * 100))
+                could_cost = int(round(eff_w * w_could * 100))
+                
+                # Add dynamic penalties to objective terms
+                terms.append(cannot_cost * mixed_cannot)
+                terms.append(could_cost * mixed_could)
 
     # force pre-matched assignments
     for sid, st_pre in prematches.items():
@@ -239,6 +356,7 @@ def solve_and_write(conn, args):
     students = load_students(cur)
     active_sids = set(students.keys())
     examiners = load_examiners(cur, active_sids)
+    patch_mixed_competence(examiners, categories)
     bans = load_bans(cur)
     prematches = load_prematches(cur)
 

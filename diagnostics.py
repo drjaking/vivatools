@@ -84,7 +84,36 @@ def fetch_students(cur) -> Dict[int, Student]:
     return {sid: Student(sid, names.get(sid, f"student {sid}"), tmp[sid]) for sid in tmp}
 
 
+def patch_mixed_competence(examiners: Dict[int, Examiner], categories: Dict[int, Category]):
+    categories_by_name = {cat.name: cid for cid, cat in categories.items()}
+    qual_id = categories_by_name.get('methodology_qualitative')
+    quant_id = categories_by_name.get('methodology_quantitative')
+    mixed_id = categories_by_name.get('methodology_mixed_qual_quant')
+    
+    if qual_id is None or quant_id is None or mixed_id is None:
+        return
+        
+    for ex in examiners.values():
+        qual_lvl = ex.competences.get(qual_id, "cannot")
+        quant_lvl = ex.competences.get(quant_id, "cannot")
+        
+        if qual_lvl in ('can', 'could') and quant_lvl in ('can', 'could'):
+            if qual_lvl == 'can' and quant_lvl == 'can':
+                inferred_lvl = 'can'
+            else:
+                inferred_lvl = 'could'
+                
+            current_lvl = ex.competences.get(mixed_id, "cannot")
+            lvl_rank = {'can': 2, 'could': 1, 'cannot': 0}
+            if lvl_rank[inferred_lvl] > lvl_rank[current_lvl]:
+                ex.competences[mixed_id] = inferred_lvl
+
+
 def fetch_examiners(cur) -> Dict[int, Examiner]:
+    # Fetch categories to identify qualitative/quantitative IDs
+    cur.execute("SELECT category_id, name, default_weight FROM categories")
+    categories = {cid: Category(cid, name, float(w) if w is not None else 1.0) for cid, name, w in cur.fetchall()}
+
     cur.execute("SELECT examiner_id, limit_n FROM examiner_limits")
     limits = {eid: lim for eid, lim in cur.fetchall()}
     cur.execute("SELECT examiner_id, examiner_type, has_dclinpsy FROM examiners")
@@ -95,7 +124,8 @@ def fetch_examiners(cur) -> Dict[int, Examiner]:
         comp[eid][cid] = lvl
     cur.execute("SELECT examiner_id, full_name FROM examiners")
     names = {eid: n for eid, n in cur.fetchall()}
-    return {
+    
+    examiners = {
         eid: Examiner(
             eid,
             names.get(eid, f"examiner {eid}"),
@@ -106,6 +136,9 @@ def fetch_examiners(cur) -> Dict[int, Examiner]:
         )
         for eid in names
     }
+    
+    patch_mixed_competence(examiners, categories)
+    return examiners
 
 
 def fetch_assignments(cur) -> List[Tuple[int,int,int]]:
@@ -137,29 +170,99 @@ def _score(level: str) -> float:
     return 1.0 if level=='can' else 0.5 if level=='could' else 0.0
 
 
-def examiner_metrics(st: Student, ex: Examiner, cats: Dict[int, Category], w_could: int, w_cannot: int) -> Tuple[float, float]:
+def get_joint_mixed_competence(
+    iex: Examiner | None, eex: Examiner | None,
+    qual_id: int | None, quant_id: int | None
+) -> str:
+    if qual_id is None or quant_id is None:
+        return 'cannot'
+    i_qual = iex.competences.get(qual_id, 'cannot') if iex else 'cannot'
+    i_quant = iex.competences.get(quant_id, 'cannot') if iex else 'cannot'
+    e_qual = eex.competences.get(qual_id, 'cannot') if eex else 'cannot'
+    e_quant = eex.competences.get(quant_id, 'cannot') if eex else 'cannot'
+    
+    # Check qual coverage
+    has_qual_can = (i_qual == 'can' or e_qual == 'can')
+    has_qual_could = (i_qual == 'could' or e_qual == 'could')
+    qual_covered = has_qual_can or has_qual_could
+    
+    # Check quant coverage
+    has_quant_can = (i_quant == 'can' or e_quant == 'can')
+    has_quant_could = (i_quant == 'could' or e_quant == 'could')
+    quant_covered = has_quant_can or has_quant_could
+    
+    if not (qual_covered and quant_covered):
+        return 'cannot'
+        
+    if has_qual_can and has_quant_can:
+        return 'can'
+        
+    return 'could'
+
+
+def examiner_metrics(
+    st: Student, ex: Examiner, cats: Dict[int, Category],
+    w_could: int, w_cannot: int,
+    skip_mixed_id: int | None = None,
+    override_competences: Dict[int, str] | None = None
+) -> Tuple[float, float]:
     tot_w = tot_pen = tot_sc = 0.0
     for cid, raw in st.categories.items():
+        if cid == skip_mixed_id:
+            continue
         w = _effective_weight(raw, cats[cid])
         lvl = ex.competences.get(cid, 'cannot')
+        if override_competences and cid in override_competences:
+            lvl = override_competences[cid]
         tot_w += w
         tot_pen += w * _penalty(lvl, w_could, w_cannot)
         tot_sc += w * _score(lvl)
     positivity = 100 * tot_sc / tot_w if tot_w else 0.0
     return round(positivity, 1), round(tot_pen, 2)
 
+
 # ---------------------------------------------------------------------------
 # Diagnostics builders
 # ---------------------------------------------------------------------------
 def build_full_diag(assignments, students, examiners, cats, w_could, w_cannot) -> List[Dict[str,str]]:
+    categories_by_name = {cat.name: cid for cid, cat in cats.items()}
+    qual_id = categories_by_name.get('methodology_qualitative')
+    quant_id = categories_by_name.get('methodology_quantitative')
+    mixed_id = categories_by_name.get('methodology_mixed_qual_quant')
+
     rows = []
     for sid, ieid, eeid in assignments:
         st = students[sid]
-        iex = examiners[ieid]; eex = examiners[eeid]
-        i_score, i_pen = examiner_metrics(st, iex, cats, w_could, w_cannot)
-        e_score, e_pen = examiner_metrics(st, eex, cats, w_could, w_cannot)
-        total_pen = round(i_pen + e_pen, 2)
-        overall_score = round((i_score + e_score) / 2, 1)
+        iex = examiners.get(ieid) if ieid else None
+        eex = examiners.get(eeid) if eeid else None
+        
+        # Determine joint mixed level
+        if mixed_id and mixed_id in st.categories:
+            p_level = get_joint_mixed_competence(iex, eex, qual_id, quant_id)
+            overrides = {mixed_id: p_level}
+            skip_id = mixed_id
+            w_mixed = _effective_weight(st.categories[mixed_id], cats[mixed_id])
+            mixed_pen = w_mixed * _penalty(p_level, w_could, w_cannot)
+        else:
+            overrides = None
+            skip_id = None
+            mixed_pen = 0.0
+            
+        i_score, i_pen = (0.0, 0.0)
+        i_pen_non_mixed = 0.0
+        if iex:
+            i_score, i_pen = examiner_metrics(st, iex, cats, w_could, w_cannot, override_competences=overrides)
+            i_pen_non_mixed = examiner_metrics(st, iex, cats, w_could, w_cannot, skip_mixed_id=skip_id)[1]
+            
+        e_score, e_pen = (0.0, 0.0)
+        e_pen_non_mixed = 0.0
+        if eex:
+            e_score, e_pen = examiner_metrics(st, eex, cats, w_could, w_cannot, override_competences=overrides)
+            e_pen_non_mixed = examiner_metrics(st, eex, cats, w_could, w_cannot, skip_mixed_id=skip_id)[1]
+            
+        total_pen = round(i_pen_non_mixed + e_pen_non_mixed + mixed_pen, 2)
+        overall_score = round((i_score + e_score) / 2, 1) if (iex and eex) else (i_score or e_score)
+        
         # categories
         top5 = ", ".join(
             cats[cid].name for cid, _ in sorted(
@@ -171,22 +274,22 @@ def build_full_diag(assignments, students, examiners, cats, w_could, w_cannot) -
         can_int = ", ".join(sorted(
             cats[cid].name for cid, lvl in iex.competences.items()
             if lvl in ('can', 'could') and cid in st.categories
-        ))
+        )) if iex else ""
         can_ext = ", ".join(sorted(
             cats[cid].name for cid, lvl in eex.competences.items()
             if lvl in ('can', 'could') and cid in st.categories
-        ))
+        )) if eex else ""
         cannot_i = ", ".join(sorted(
             cats[cid].name for cid, lvl in iex.competences.items()
             if lvl == 'cannot' and cid in st.categories
-        ))
+        )) if iex else ""
         cannot_e = ", ".join(sorted(
             cats[cid].name for cid, lvl in eex.competences.items()
             if lvl == 'cannot' and cid in st.categories
-        ))
+        )) if eex else ""
         rows.append({
             'student': st.name,
-            'internal_examiner': iex.name, 'external_examiner': eex.name,
+            'internal_examiner': iex.name if iex else "None", 'external_examiner': eex.name if eex else "None",
             'internal_score': i_score, 'external_score': e_score, 'overall_score': overall_score,
             'internal_penalty': i_pen, 'external_penalty': e_pen, 'total_penalty': total_pen,
             'top_5_categories': top5, 'student_yes_categories': yes_cats,
