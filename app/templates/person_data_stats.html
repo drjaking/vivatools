@@ -1,0 +1,76 @@
+<!-- app/templates/person_data_stats.html -->
+<div class="grid-3" style="margin-bottom: 24px;">
+    <!-- Card 1: Student Demand -->
+    <div class="card" style="margin-bottom: 0; position: relative; overflow: hidden; border-left: 4px solid var(--accent); border-radius: var(--radius-md); background-color: var(--bg-secondary); border: 1px solid var(--border);">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+            <div>
+                <div style="font-size: 0.8rem; font-weight: 600; text-transform: uppercase; color: var(--text-secondary); letter-spacing: 0.5px; margin-bottom: 8px;">
+                    Student Demand
+                </div>
+                <div style="font-size: 2.25rem; font-weight: 700; color: var(--text-primary); line-height: 1; margin-bottom: 6px;">
+                    {{ active_students }}
+                </div>
+                <div style="font-size: 0.85rem; color: var(--text-secondary);">
+                    Active Students / Vivas Needed
+                </div>
+            </div>
+            <div style="font-size: 2.5rem; opacity: 0.2; line-height: 1;">🎓</div>
+        </div>
+        <div style="margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--text-muted);">
+            <span>Deferred: <strong>{{ deferred_students }}</strong></span>
+            <span>Total Slots: <strong>{{ active_students * 2 }}</strong></span>
+        </div>
+    </div>
+
+    <!-- Card 2: Internal Examiner Supply -->
+    <div class="card" style="margin-bottom: 0; position: relative; overflow: hidden; border-left: 4px solid var(--success); border-radius: var(--radius-md); background-color: var(--bg-secondary); border: 1px solid var(--border);">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+            <div>
+                <div style="font-size: 0.8rem; font-weight: 600; text-transform: uppercase; color: var(--text-secondary); letter-spacing: 0.5px; margin-bottom: 8px;">
+                    Internal Supply
+                </div>
+                <div style="font-size: 2.25rem; font-weight: 700; color: var(--text-primary); line-height: 1; margin-bottom: 6px;">
+                    {{ int_capacity }}
+                </div>
+                <div style="font-size: 0.85rem; color: var(--text-secondary);">
+                    Vivas Capacity ({{ int_count }} Examiners)
+                </div>
+            </div>
+            <div style="font-size: 2.5rem; opacity: 0.2; line-height: 1;">🏛️</div>
+        </div>
+        <div style="margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--text-muted);">
+            <span>Target: <strong>{{ active_students }}</strong></span>
+            <span>Net Margin: 
+                <strong style="color: {% if int_capacity >= active_students %}var(--success){% else %}var(--danger){% endif %}; font-weight: 600;">
+                    {{ int_capacity - active_students }} slots
+                </strong>
+            </span>
+        </div>
+    </div>
+
+    <!-- Card 3: External Examiner Supply -->
+    <div class="card" style="margin-bottom: 0; position: relative; overflow: hidden; border-left: 4px solid var(--warning); border-radius: var(--radius-md); background-color: var(--bg-secondary); border: 1px solid var(--border);">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+            <div>
+                <div style="font-size: 0.8rem; font-weight: 600; text-transform: uppercase; color: var(--text-secondary); letter-spacing: 0.5px; margin-bottom: 8px;">
+                    External Supply
+                </div>
+                <div style="font-size: 2.25rem; font-weight: 700; color: var(--text-primary); line-height: 1; margin-bottom: 6px;">
+                    {{ ext_capacity }}
+                </div>
+                <div style="font-size: 0.85rem; color: var(--text-secondary);">
+                    Vivas Capacity ({{ ext_count }} Examiners)
+                </div>
+            </div>
+            <div style="font-size: 2.5rem; opacity: 0.2; line-height: 1;">✈️</div>
+        </div>
+        <div style="margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--text-muted);">
+            <span>Target: <strong>{{ active_students }}</strong></span>
+            <span>Net Margin: 
+                <strong style="color: {% if ext_capacity >= active_students %}var(--success){% else %}var(--danger){% endif %}; font-weight: 600;">
+                    {{ ext_capacity - active_students }} slots
+                </strong>
+            </span>
+        </div>
+    </div>
+</div>

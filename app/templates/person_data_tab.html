@@ -2,6 +2,16 @@
 {% extends "base.html" %}
 
 {% block content %}
+<!-- Demand and Supply Summary Statistics -->
+<div id="person-data-stats-container" 
+     hx-get="/person-data/stats" 
+     hx-trigger="load, refreshList from:body"
+     hx-swap="innerHTML">
+    <div style="padding: 20px; text-align: center; color: var(--text-muted); background-color: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius-md); margin-bottom: 24px;">
+        <span class="spinner"></span> Loading demand and capacity statistics...
+    </div>
+</div>
+
 <div class="grid-2" style="grid-template-columns: 55% 45%;">
     <!-- Left Column: Search & Lists -->
     <div class="card" style="margin-bottom: 0; min-height: calc(100vh - 200px); display: flex; flex-direction: column;">

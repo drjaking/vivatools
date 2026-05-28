@@ -1174,6 +1174,57 @@ def get_person_data(request: Request):
     return templates.TemplateResponse(request, "person_data_tab.html", {"active_tab": "person-data"})
 
 
+@app.get("/person-data/stats", response_class=HTMLResponse)
+def get_person_data_stats(request: Request):
+    conn = get_db_conn()
+    try:
+        with conn.cursor() as cur:
+            # Active (non-deferred) students count
+            cur.execute("SELECT COUNT(*) FROM students WHERE COALESCE(deferred, FALSE) = FALSE")
+            active_students = cur.fetchone()[0]
+            
+            # Deferred students count
+            cur.execute("SELECT COUNT(*) FROM students WHERE COALESCE(deferred, FALSE) = TRUE")
+            deferred_students = cur.fetchone()[0]
+            
+            # Internal capacity & count
+            cur.execute("""
+                SELECT 
+                    COUNT(*),
+                    COALESCE(SUM(COALESCE(limit_n, 3)), 0)
+                FROM examiners ex
+                LEFT JOIN examiner_limits el USING (examiner_id)
+                WHERE ex.examiner_type = 'internal'
+            """)
+            int_count, int_capacity = cur.fetchone()
+            
+            # External capacity & count
+            cur.execute("""
+                SELECT 
+                    COUNT(*),
+                    COALESCE(SUM(COALESCE(limit_n, 3)), 0)
+                FROM examiners ex
+                LEFT JOIN examiner_limits el USING (examiner_id)
+                WHERE ex.examiner_type = 'external'
+            """)
+            ext_count, ext_capacity = cur.fetchone()
+    finally:
+        conn.close()
+        
+    return templates.TemplateResponse(
+        request, 
+        "person_data_stats.html", 
+        {
+            "active_students": active_students,
+            "deferred_students": deferred_students,
+            "int_count": int_count,
+            "int_capacity": int_capacity,
+            "ext_count": ext_count,
+            "ext_capacity": ext_capacity
+        }
+    )
+
+
 @app.get("/person-data/list", response_class=HTMLResponse)
 def get_person_data_list(request: Request, type: str = "students", search: Optional[str] = None):
     conn = get_db_conn()
