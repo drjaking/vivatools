@@ -22,6 +22,7 @@
             <li><strong>'Could' Competence:</strong> Incurs the 'Could' weight penalty (Default: 3).</li>
             <li><strong>'Cannot' Competence:</strong> Incurs the 'Cannot' weight penalty (Default: 10).</li>
             <li><strong>Group Mismatch:</strong> Incurs a penalty (Default: 5) if coupled projects do not share the same examiner.</li>
+            <li><strong>Unoccupied Examiner:</strong> Incurs a penalty per student short of the target minimum capacity ratio (4:2, 3:2, 2:1, 1:1) (Default: 4).</li>
         </ul>
         <p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 4px; line-height: 1.4;">
             <em>Note: If a student's thesis category has a specific weight set in constraints, it scales these penalties. Otherwise, the category's default weight (from the Constraints tab) is used.</em>
@@ -29,7 +30,7 @@
     </div>
     
     <form hx-post="/matching/run-solver" hx-target="#solver-console" hx-indicator="#solver-run-indicator">
-        <div class="grid-3" style="margin-bottom: 16px;">
+        <div class="grid-4" style="margin-bottom: 16px;">
             <div class="form-group">
                 <label>Weight for 'Could' Competence (Default: 3)</label>
                 <input type="number" name="weight_could" value="3" required min="0">
@@ -41,6 +42,10 @@
             <div class="form-group">
                 <label>Weight for Group Mismatch (Default: 5)</label>
                 <input type="number" name="weight_group_miss" value="5" required min="0">
+            </div>
+            <div class="form-group">
+                <label>Weight for Unoccupied (Default: 4)</label>
+                <input type="number" name="weight_unoccupied" value="4" required min="0">
             </div>
         </div>
         <div class="grid-2" style="margin-bottom: 16px;">
@@ -82,6 +87,9 @@ Console idle. Click 'Run Allocations Solver' to start execution.
 <div id="diagnostics-container">
     {% include "diagnostics_tables.html" %}
 </div>
+
+<!-- Modal container for examiner replacement lookup -->
+<div id="replacement-modal-container"></div>
 
 
 

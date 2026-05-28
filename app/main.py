@@ -2058,6 +2058,7 @@ async def run_solver(
     weight_could: int = Form(3),
     weight_cannot: int = Form(10),
     weight_group_miss: int = Form(5),
+    weight_unoccupied: int = Form(4),
     max_seconds: int = Form(300),
     threads: int = Form(8)
 ):
@@ -2069,6 +2070,7 @@ async def run_solver(
             "--weight-could", str(weight_could),
             "--weight-cannot", str(weight_cannot),
             "--weight-group-miss", str(weight_group_miss),
+            "--weight-unoccupied", str(weight_unoccupied),
             "--max-seconds", str(max_seconds),
             "--threads", str(threads)
         ]
@@ -2082,6 +2084,7 @@ async def run_solver(
     except Exception as e:
         return HTMLResponse(content=f"<pre>Exception occurred running solver: {str(e)}</pre>")
 
+
 @app.get("/matching/tables")
 def get_matching_tables(request: Request):
     student_rows, workload_rows, internal_examiners, external_examiners, alert_message, alert_success = fetch_tab3_data()
@@ -2092,6 +2095,142 @@ def get_matching_tables(request: Request):
         "external_examiners": external_examiners,
         "alert_message": alert_message,
         "alert_success": alert_success
+    })
+
+@app.get("/matching/find-replacement/{student_id}/{role}", response_class=HTMLResponse)
+async def find_replacement(request: Request, student_id: int, role: str):
+    conn = get_db_conn()
+    with conn, conn.cursor() as cur:
+        # Fetch student details
+        cur.execute("SELECT full_name, project_title FROM students WHERE student_id = %s", (student_id,))
+        student_row = cur.fetchone()
+        if not student_row:
+            conn.close()
+            return HTMLResponse(content="Student not found", status_code=404)
+        student_name, project_title = student_row
+
+        # Load diagnostics structures
+        cats = diagnostics.fetch_categories(cur)
+        students = diagnostics.fetch_students(cur)
+        examiners = diagnostics.fetch_examiners(cur)
+        assignments = diagnostics.fetch_assignments(cur)
+
+        st_obj = students.get(student_id)
+        if not st_obj:
+            conn.close()
+            return HTMLResponse(content="Student project categories not found", status_code=404)
+
+        # Get current assignments
+        current_internal_id = None
+        current_external_id = None
+        for sid, ieid, eeid in assignments:
+            if sid == student_id:
+                current_internal_id = ieid
+                current_external_id = eeid
+                break
+
+        current_target_id = current_internal_id if role == 'internal' else current_external_id
+        other_id = current_external_id if role == 'internal' else current_internal_id
+        other_ex = examiners.get(other_id) if other_id else None
+
+        # Fetch bans for this student
+        cur.execute("SELECT examiner_id, reason FROM examiner_student_bans WHERE student_id = %s", (student_id,))
+        bans = {r[0]: r[1] for r in cur.fetchall()}
+
+        categories_by_name = {cat.name: cid for cid, cat in cats.items()}
+        qual_id = categories_by_name.get('methodology_qualitative')
+        quant_id = categories_by_name.get('methodology_quantitative')
+        mixed_id = categories_by_name.get('methodology_mixed_qual_quant')
+
+        candidates = []
+        for ex in examiners.values():
+            # Check type
+            if role == 'internal' and not ex.is_internal:
+                continue
+            if role == 'external' and ex.is_internal:
+                continue
+
+            # Cannot be banned
+            if ex.id in bans:
+                continue
+
+            # Cannot be the other examiner
+            if other_ex and ex.id == other_ex.id:
+                continue
+
+            # Calculate workload count excluding the current student's assignment
+            cur.execute("SELECT COUNT(*) FROM examiner_assignments WHERE examiner_id = %s AND student_id != %s", (ex.id, student_id))
+            assigned_count = cur.fetchone()[0]
+            remaining_capacity = ex.limit - assigned_count
+
+            # DClinPsy compliance
+            violates_dclinpsy = False
+            if other_ex and not other_ex.has_dclinpsy and not ex.has_dclinpsy:
+                violates_dclinpsy = True
+
+            # Mixed-methods joint compliance
+            is_mixed_project = (mixed_id is not None and mixed_id in st_obj.categories)
+            mixed_mismatch = False
+            mixed_level = 'cannot'
+
+            if is_mixed_project:
+                if role == 'internal':
+                    iex_obj = ex
+                    eex_obj = other_ex
+                else:
+                    iex_obj = other_ex
+                    eex_obj = ex
+                mixed_level = diagnostics.get_joint_mixed_competence(iex_obj, eex_obj, qual_id, quant_id)
+                overrides = {mixed_id: mixed_level}
+                skip_id = mixed_id
+                w_mixed = diagnostics._effective_weight(st_obj.categories.get(mixed_id), cats[mixed_id])
+                mixed_pen = w_mixed * diagnostics._penalty(mixed_level, 3, 10)
+                mixed_mismatch = (mixed_level == 'cannot')
+            else:
+                overrides = None
+                skip_id = None
+                mixed_pen = 0.0
+
+            # Calculate competence metrics
+            cand_score, cand_pen = diagnostics.examiner_metrics(st_obj, ex, cats, 3, 10, override_competences=overrides)
+            
+            top_3 = get_top_matching_categories(st_obj, ex, cats)
+
+            candidates.append({
+                "examiner_id": ex.id,
+                "full_name": ex.name,
+                "has_dclinpsy": ex.has_dclinpsy,
+                "limit_n": ex.limit,
+                "assigned": assigned_count,
+                "remaining": remaining_capacity,
+                "score": cand_score,
+                "penalty": cand_pen,
+                "violates_dclinpsy": violates_dclinpsy,
+                "mixed_mismatch": mixed_mismatch,
+                "mixed_level": mixed_level,
+                "is_current": (ex.id == current_target_id),
+                "top_3": top_3
+            })
+
+        # Sort the candidates list: DClinPsy compliant first, then capacity > 0 first, then highest score, then lowest penalty
+        candidates.sort(key=lambda c: (
+            1 if c['violates_dclinpsy'] else 0,
+            1 if c['remaining'] <= 0 else 0,
+            -c['score'],
+            c['penalty'],
+            c['full_name'].lower()
+        ))
+
+    conn.close()
+
+    return templates.TemplateResponse(request, "find_replacement_modal.html", {
+        "student_id": student_id,
+        "student_name": student_name,
+        "project_title": project_title,
+        "role": role,
+        "candidates": candidates,
+        "other_ex": other_ex,
+        "is_mixed_project": is_mixed_project
     })
 
 @app.post("/matching/update-assignment")
@@ -2140,7 +2279,7 @@ async def update_assignment(request: Request, student_id: int = Form(...), role:
     conn.close()
     
     student_rows, workload_rows, internal_examiners, external_examiners, _, _ = fetch_tab3_data(alert_msg, alert_ok)
-    return templates.TemplateResponse(request, "diagnostics_tables.html", {
+    response = templates.TemplateResponse(request, "diagnostics_tables.html", {
         "student_rows": student_rows,
         "workload_rows": workload_rows,
         "internal_examiners": internal_examiners,
@@ -2148,6 +2287,8 @@ async def update_assignment(request: Request, student_id: int = Form(...), role:
         "alert_message": alert_msg,
         "alert_success": alert_ok
     })
+    response.headers["HX-Trigger"] = "refreshList"
+    return response
 
 @app.post("/matching/toggle-deferred")
 async def toggle_deferred(request: Request, student_id: int = Form(...)):

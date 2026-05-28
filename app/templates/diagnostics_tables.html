@@ -50,6 +50,14 @@
                             </td>
                             <td>
                                 <div style="display: flex; align-items: center; gap: 8px;">
+                                    <button class="btn-replacement-lookup"
+                                            hx-get="/matching/find-replacement/{{ row.student_id }}/internal"
+                                            hx-target="#replacement-modal-container"
+                                            onclick="event.stopPropagation();"
+                                            title="Find Replacement Internal Examiner"
+                                            type="button">
+                                        🔍
+                                    </button>
                                     <select name="examiner_id" 
                                             hx-post="/matching/update-assignment" 
                                             hx-trigger="change" 
@@ -85,6 +93,14 @@
                             </td>
                             <td>
                                 <div style="display: flex; align-items: center; gap: 8px;">
+                                    <button class="btn-replacement-lookup"
+                                            hx-get="/matching/find-replacement/{{ row.student_id }}/external"
+                                            hx-target="#replacement-modal-container"
+                                            onclick="event.stopPropagation();"
+                                            title="Find Replacement External Examiner"
+                                            type="button">
+                                        🔍
+                                    </button>
                                     <select name="examiner_id" 
                                             hx-post="/matching/update-assignment" 
                                             hx-trigger="change" 

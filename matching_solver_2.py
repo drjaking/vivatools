@@ -168,6 +168,14 @@ def competence_penalty(level: str, w_could: int, w_cannot: int) -> int:
     return w_cannot
 
 
+def get_min_desirable(limit: int) -> int:
+    if limit >= 4: return 2
+    if limit == 3: return 2
+    if limit == 2: return 1
+    if limit == 1: return 1
+    return 0
+
+
 def student_examiner_cost(
     st: Student, ex: Examiner, categories: Dict[int, Category],
     w_could: int, w_cannot: int,
@@ -195,7 +203,8 @@ def build_model(
     prematches: Dict[int, Dict[str, int]],
     w_could: int,
     w_cannot: int,
-    w_group_miss: int
+    w_group_miss: int,
+    w_unoccupied: int
 ) -> Tuple[cp_model.CpModel, Dict[Tuple[int, int], cp_model.IntVar]]:
     model = cp_model.CpModel()
     x: Dict[Tuple[int, int], cp_model.IntVar] = {}
@@ -323,6 +332,14 @@ def build_model(
     # capacity
     for eid, ex in examiners.items():
         model.Add(sum(x[(sid, eid)] for sid in students if (sid, eid) in x) <= ex.limit)
+        
+        # soft minimum workload constraint
+        min_desirable = get_min_desirable(ex.limit)
+        if min_desirable > 0:
+            under_alloc = model.NewIntVar(0, min_desirable, f"under_alloc_{eid}")
+            assigned_vars = [x[(sid, eid)] for sid in students if (sid, eid) in x]
+            model.Add(sum(assigned_vars) + under_alloc >= min_desirable)
+            terms.append(w_unoccupied * 100 * under_alloc)
 
     # soft group sharing
     groups = defaultdict(list)
@@ -366,7 +383,8 @@ def solve_and_write(conn, args):
 
     model, x = build_model(
         students, examiners, bans, categories, prematches,
-        args.weight_could, args.weight_cannot, args.weight_group_miss
+        args.weight_could, args.weight_cannot, args.weight_group_miss,
+        args.weight_unoccupied
     )
 
     solver = cp_model.CpSolver()
@@ -410,6 +428,7 @@ def parse_args():
     p.add_argument("--weight-could", type=int, default=3)
     p.add_argument("--weight-cannot", type=int, default=10)
     p.add_argument("--weight-group-miss", type=int, default=5)
+    p.add_argument("--weight-unoccupied", type=int, default=4)
     p.add_argument("--max-seconds", type=int, default=300)
     p.add_argument("--threads", type=int, default=8)
     return p.parse_args()

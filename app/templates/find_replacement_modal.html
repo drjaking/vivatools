@@ -1,0 +1,260 @@
+<!-- app/templates/find_replacement_modal.html -->
+<style>
+    /* Modal styles to avoid browser CSS caching issues */
+    @keyframes modalFadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+    }
+
+    @keyframes modalScaleIn {
+        from { transform: scale(0.95); opacity: 0; }
+        to { transform: scale(1); opacity: 1; }
+    }
+
+    .modal-backdrop {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background: rgba(15, 23, 42, 0.8) !important;
+        backdrop-filter: blur(8px);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 99999 !important;
+        animation: modalFadeIn 0.2s ease-out forwards;
+    }
+
+    .modal-content {
+        background: var(--bg-secondary) !important;
+        border: 1px solid var(--border) !important;
+        border-radius: var(--radius-md) !important;
+        width: 90% !important;
+        max-width: 900px !important;
+        max-height: 85vh !important;
+        display: flex;
+        flex-direction: column;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5) !important;
+        overflow: hidden !important;
+        animation: modalScaleIn 0.2s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+    }
+
+    .modal-header {
+        padding: 16px 24px;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background-color: rgba(255, 255, 255, 0.01);
+    }
+
+    .modal-title {
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: var(--text-primary);
+    }
+
+    .modal-close-btn {
+        background: none;
+        border: none;
+        color: var(--text-secondary);
+        font-size: 1.5rem;
+        cursor: pointer;
+        line-height: 1;
+        padding: 4px;
+        border-radius: var(--radius-sm);
+        transition: var(--transition);
+    }
+
+    .modal-close-btn:hover {
+        color: var(--text-primary);
+        background-color: rgba(255, 255, 255, 0.05);
+    }
+
+    .modal-body {
+        padding: 20px;
+        overflow-y: auto;
+        flex: 1;
+    }
+
+    .modal-footer {
+        padding: 12px 20px;
+        border-top: 1px solid var(--border);
+        display: flex;
+        justify-content: flex-end;
+        background-color: rgba(255, 255, 255, 0.01);
+    }
+</style>
+
+<div class="modal-backdrop" id="replacement-modal-backdrop">
+    <div class="modal-content">
+        <div class="modal-header">
+            <div>
+                <h3 class="modal-title" style="margin: 0;">Replace {{ role | capitalize }} Examiner</h3>
+                <div style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 4px;">
+                    Student: <strong>{{ student_name }}</strong> &nbsp;|&nbsp; Project: <em>{{ project_title or 'No Title Specified' }}</em>
+                </div>
+            </div>
+            <button class="modal-close-btn" id="replacement-modal-close" type="button" style="font-size: 1.75rem;">&times;</button>
+        </div>
+        
+        <div class="modal-body" style="padding: 20px;">
+            {% if candidates %}
+                <div style="overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); background-color: var(--bg-primary);">
+                    <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem; text-align: left;">
+                        <thead>
+                            <tr style="border-bottom: 1px solid var(--border); background-color: rgba(255,255,255,0.015);">
+                                <th style="padding: 12px 16px; color: var(--text-secondary); font-weight: 600;">Candidate Examiner</th>
+                                <th style="padding: 12px 16px; color: var(--text-secondary); font-weight: 600; text-align: center; width: 150px;">Workload Capacity</th>
+                                <th style="padding: 12px 16px; color: var(--text-secondary); font-weight: 600; text-align: center; width: 120px;">Match Score</th>
+                                {% if is_mixed_project %}
+                                <th style="padding: 12px 16px; color: var(--text-secondary); font-weight: 600; text-align: center; width: 140px;">Mixed Methods</th>
+                                {% endif %}
+                                <th style="padding: 12px 16px; color: var(--text-secondary); font-weight: 600; text-align: center; width: 100px;">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for c in candidates %}
+                            <tr style="border-bottom: 1px solid var(--border); transition: var(--transition); {% if c.is_current %}background-color: rgba(99, 102, 241, 0.06);{% endif %}" 
+                                onmouseover="this.style.backgroundColor='rgba(255,255,255,0.015)'" 
+                                onmouseout="this.style.backgroundColor='{% if c.is_current %}rgba(99, 102, 241, 0.06){% else %}transparent{% endif %}'">
+                                <td style="padding: 14px 16px; vertical-align: top;">
+                                    <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                                        <span style="font-weight: 600; color: var(--text-primary); font-size: 0.9rem;">{{ c.full_name }}</span>
+                                        {% if c.has_dclinpsy %}
+                                            <span class="badge badge-success" style="font-size: 0.65rem; padding: 2px 6px; background-color: var(--success-bg); color: var(--success); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: 4px;">🎓 DClinPsy</span>
+                                        {% endif %}
+                                        {% if c.is_current %}
+                                            <span class="badge" style="font-size: 0.65rem; padding: 2px 6px; background-color: rgba(255, 255, 255, 0.05); color: var(--text-secondary); border: 1px solid var(--border); border-radius: 4px;">Current Match</span>
+                                        {% endif %}
+                                        {% if c.violates_dclinpsy %}
+                                            <span class="badge" style="font-size: 0.65rem; padding: 2px 6px; background-color: var(--danger-bg); color: var(--danger); border: 1px solid rgba(239, 68, 68, 0.2); border-radius: 4px; font-weight: 500;">⚠️ No DClinPsy in Pair</span>
+                                        {% endif %}
+                                    </div>
+                                    
+                                    <!-- Top 3 Categories -->
+                                    <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 6px; display: flex; gap: 6px; flex-wrap: wrap;">
+                                        {% for cat in c.top_3 %}
+                                        <span style="background-color: var(--bg-secondary); border: 1px solid var(--border); padding: 2px 6px; border-radius: var(--radius-sm); font-size: 0.7rem; display: inline-flex; align-items: center; gap: 4px;" title="Competence level: {{ cat.competence }}">
+                                            <span class="badge-comp badge-comp-{{ cat.competence }}" style="padding: 0 4px; font-size: 0.6rem; border-radius: 2px;">{{ cat.competence }}</span>
+                                            {{ cat.name }}
+                                        </span>
+                                        {% endfor %}
+                                    </div>
+                                </td>
+                                <td style="padding: 14px 16px; text-align: center; vertical-align: top;">
+                                    <div style="font-weight: 500; color: var(--text-primary);">{{ c.assigned }} / {{ c.limit_n }}</div>
+                                    <div style="margin-top: 4px;">
+                                        {% if c.remaining < 0 %}
+                                            <span class="badge" style="font-size: 0.65rem; padding: 2px 6px; background-color: var(--danger-bg); color: var(--danger); border: 1px solid rgba(239, 68, 68, 0.2); border-radius: 4px;">⚠️ Over Limit ({{ c.remaining }})</span>
+                                        {% elif c.remaining == 0 %}
+                                            <span class="badge" style="font-size: 0.65rem; padding: 2px 6px; background-color: var(--warning-bg); color: var(--warning); border: 1px solid rgba(245, 158, 11, 0.2); border-radius: 4px;">⚠️ At Capacity</span>
+                                        {% else %}
+                                            <span class="badge" style="font-size: 0.65rem; padding: 2px 6px; background-color: var(--success-bg); color: var(--success); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: 4px;">{{ c.remaining }} slots rem</span>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                                <td style="padding: 14px 16px; text-align: center; vertical-align: top;">
+                                    <div style="font-weight: bold; color: var(--accent); font-size: 1rem;">{{ c.score }}%</div>
+                                    <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 2px;">Pen: {{ c.penalty }}</div>
+                                </td>
+                                {% if is_mixed_project %}
+                                <td style="padding: 14px 16px; text-align: center; vertical-align: top;">
+                                    {% if c.mixed_mismatch %}
+                                        <span class="badge" style="font-size: 0.65rem; padding: 2px 6px; background-color: var(--danger-bg); color: var(--danger); border: 1px solid rgba(239, 68, 68, 0.2); border-radius: 4px;">⚠️ Mismatch</span>
+                                    {% else %}
+                                        <span class="badge" style="font-size: 0.65rem; padding: 2px 6px; background-color: var(--success-bg); color: var(--success); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: 4px;">✓ Covered ({{ c.mixed_level }})</span>
+                                    {% endif %}
+                                </td>
+                                {% endif %}
+                                <td style="padding: 14px 16px; text-align: center; vertical-align: top;">
+                                    <button hx-post="/matching/update-assignment"
+                                            hx-vals='{"student_id": {{ student_id }}, "role": "{{ role }}", "examiner_id": {{ c.examiner_id }}}'
+                                            hx-target="#diagnostics-container"
+                                            class="btn {% if c.is_current %}btn-secondary{% else %}btn-primary{% endif %} btn-sm"
+                                            {% if c.is_current %}disabled style="opacity: 0.4; cursor: not-allowed; width: 100%; border-radius: var(--radius-sm);"
+                                            {% else %}style="width: 100%; border-radius: var(--radius-sm); font-weight: 500;"{% endif %}>
+                                        Select
+                                    </button>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <div style="padding: 40px; text-align: center; color: var(--text-secondary); border: 1px dashed var(--border); border-radius: var(--radius-md); background-color: rgba(255,255,255,0.015);">
+                    No candidates found for this student.
+                </div>
+            {% endif %}
+        </div>
+        
+        <div class="modal-footer" style="padding: 12px 20px;">
+            <button class="btn btn-secondary" id="replacement-modal-cancel-btn" type="button" style="border-radius: var(--radius-sm); font-weight: 500; font-size: 0.9rem;">
+                Cancel
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+    (function() {
+        const backdrop = document.getElementById('replacement-modal-backdrop');
+        const container = document.getElementById('replacement-modal-container');
+        
+        // Disable body scroll when modal is active
+        document.body.style.overflow = 'hidden';
+
+        function closeModal() {
+            container.innerHTML = '';
+            document.body.style.overflow = ''; // re-enable body scroll
+        }
+
+        // Close on backdrop click
+        if (backdrop) {
+            backdrop.addEventListener('click', function(e) {
+                if (e.target === backdrop) {
+                    closeModal();
+                }
+            });
+        }
+
+        // Close on Escape key
+        const escHandler = function(e) {
+            if (e.key === 'Escape') {
+                closeModal();
+                document.removeEventListener('keydown', escHandler);
+            }
+        };
+        document.addEventListener('keydown', escHandler);
+
+        // Bind close buttons
+        const closeBtn = document.getElementById('replacement-modal-close');
+        if (closeBtn) {
+            closeBtn.addEventListener('click', function() {
+                closeModal();
+                document.removeEventListener('keydown', escHandler);
+            });
+        }
+        
+        const cancelBtn = document.getElementById('replacement-modal-cancel-btn');
+        if (cancelBtn) {
+            cancelBtn.addEventListener('click', function() {
+                closeModal();
+                document.removeEventListener('keydown', escHandler);
+            });
+        }
+        
+        // Listen for htmx success/swap to close modal
+        const onSwap = function(evt) {
+            if (evt.detail.target.id === 'diagnostics-container') {
+                closeModal();
+                document.removeEventListener('keydown', escHandler);
+                document.body.removeEventListener('htmx:afterSwap', onSwap);
+            }
+        };
+        document.body.addEventListener('htmx:afterSwap', onSwap);
+    })();
+</script>
+
