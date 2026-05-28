@@ -1615,6 +1615,80 @@ async def post_examiner_edit(
         conn.close()
 
 
+@app.post("/person-data/examiner/{examiner_id}/update-capacity", response_class=HTMLResponse)
+def post_examiner_capacity(
+    request: Request,
+    examiner_id: int,
+    limit_n: int = Form(...)
+):
+    conn = get_db_conn()
+    headers = {}
+    try:
+        with conn, conn.cursor() as cur:
+            # Check active assignments
+            cur.execute("SELECT COUNT(*) FROM examiner_assignments WHERE examiner_id = %s", (examiner_id,))
+            active_assignments = cur.fetchone()[0]
+            
+            if limit_n < active_assignments:
+                # Load the existing database limit_n to restore the original value in the row
+                cur.execute("SELECT COALESCE(limit_n, 3) FROM examiner_limits WHERE examiner_id = %s", (examiner_id,))
+                limit_n_row = cur.fetchone()
+                limit_n_val = limit_n_row[0] if limit_n_row else 3
+                
+                # Trigger client-side alert
+                import json
+                headers["HX-Trigger"] = json.dumps({
+                    "showCapacityError": {
+                        "message": f"Error: Cannot reduce capacity to {limit_n} as this examiner has {active_assignments} active assignments."
+                    }
+                })
+                limit_n = limit_n_val
+            else:
+                # Save limit_n to database
+                cur.execute("""
+                    INSERT INTO examiner_limits (examiner_id, limit_n)
+                    VALUES (%s, %s)
+                    ON CONFLICT (examiner_id) DO UPDATE SET limit_n = EXCLUDED.limit_n
+                """, (examiner_id, limit_n))
+                conn.commit()
+                # Trigger refreshList to update demand/supply stats
+                headers["HX-Trigger"] = "refreshList"
+                
+            # Retrieve updated examiner info
+            cur.execute("""
+                SELECT examiner_id, full_name, examiner_type, email, has_dclinpsy
+                FROM examiners
+                WHERE examiner_id = %s
+            """, (examiner_id,))
+            ex_row = cur.fetchone()
+            ex_dict = {
+                "examiner_id": ex_row[0],
+                "full_name": ex_row[1],
+                "examiner_type": ex_row[2],
+                "email": ex_row[3],
+                "has_dclinpsy": bool(ex_row[4]),
+                "limit_n": limit_n,
+                "active_assignments": active_assignments
+            }
+    except Exception as e:
+        conn.rollback()
+        import json
+        headers["HX-Trigger"] = json.dumps({
+            "showCapacityError": {
+                "message": f"Database Error: {str(e)}"
+            }
+        })
+    finally:
+        conn.close()
+        
+    return templates.TemplateResponse(
+        request, 
+        "person_data_examiner_row.html", 
+        {"ex": ex_dict},
+        headers=headers
+    )
+
+
 @app.post("/person-data/quick-add-examiner", response_class=HTMLResponse)
 def post_quick_add_examiner(
     request: Request,

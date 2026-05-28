@@ -129,5 +129,12 @@
     document.body.addEventListener('refreshList', function() {
         htmx.trigger('#search-input', 'search');
     });
+
+    // Event listener for capacity error messages
+    document.body.addEventListener('showCapacityError', function(evt) {
+        if (evt.detail && evt.detail.message) {
+            alert(evt.detail.message);
+        }
+    });
 </script>
 {% endblock %}

@@ -3,48 +3,15 @@
 <table id="examiners-data-table">
     <thead>
         <tr>
-            <th class="sortable" onclick="sortExaminersTable(0)" style="width: 45%;">Name</th>
-            <th class="sortable" onclick="sortExaminersTable(1)" style="width: 25%;">Type</th>
-            <th class="sortable" onclick="sortExaminersTable(2)" style="width: 30%;">Workload</th>
+            <th class="sortable" onclick="sortExaminersTable(0)" style="width: 40%;">Name</th>
+            <th class="sortable" onclick="sortExaminersTable(1)" style="width: 20%;">Type</th>
+            <th class="sortable" onclick="sortExaminersTable(2)" style="width: 20%;">Workload</th>
+            <th class="sortable" onclick="sortExaminersTable(3)" style="width: 20%;">Capacity</th>
         </tr>
     </thead>
     <tbody>
         {% for ex in examiners %}
-        <tr hx-get="/person-data/examiner/{{ ex.examiner_id }}" 
-            hx-target="#edit-panel" 
-            style="cursor: pointer;"
-            class="list-row">
-            <td style="font-weight: 500;">
-                <div style="display: flex; align-items: center; gap: 6px;">
-                    <span>{{ ex.full_name }}</span>
-                    {% if ex.has_dclinpsy %}
-                    <span title="DClinPsy Qualified" style="font-size: 0.62rem; font-weight: 600; padding: 1px 5px; background-color: rgba(52, 211, 153, 0.12); color: #34d399; border-radius: 3px; line-height: 1.2;">DClinPsy</span>
-                    {% endif %}
-                </div>
-            </td>
-            <td>
-                {% if ex.examiner_type == 'internal' %}
-                <span class="badge" style="background-color: rgba(99, 102, 241, 0.1); color: #818cf8; font-size: 0.65rem; padding: 2px 6px;">Internal</span>
-                {% else %}
-                <span class="badge" style="background-color: rgba(245, 158, 11, 0.1); color: #fbbf24; font-size: 0.65rem; padding: 2px 6px;">External</span>
-                {% endif %}
-            </td>
-            <td>
-                <div style="display: flex; align-items: center; gap: 8px;">
-                    <div style="font-size: 0.85rem; font-weight: 600;">
-                        {{ ex.active_assignments }} / {{ ex.limit_n }}
-                    </div>
-                    <!-- Small progress bar for capacity -->
-                    <div style="flex: 1; height: 6px; background-color: var(--bg-primary); border-radius: 3px; overflow: hidden; max-width: 60px;">
-                        {% set pct = (ex.active_assignments / ex.limit_n * 100) if ex.limit_n > 0 else 0 %}
-                        {% if pct > 100 %}{% set pct = 100 %}{% endif %}
-                        <div style="width: {{ pct }}%; height: 100%; 
-                                    background-color: {% if ex.active_assignments >= ex.limit_n %}var(--danger){% elif ex.active_assignments >= ex.limit_n - 1 %}var(--warning){% else %}var(--success){% endif %};">
-                        </div>
-                    </div>
-                </div>
-            </td>
-        </tr>
+            {% include "person_data_examiner_row.html" %}
         {% endfor %}
     </tbody>
 </table>
