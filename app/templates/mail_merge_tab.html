@@ -19,11 +19,15 @@
                 </div>
                 <div class="form-group">
                     <label>Internal Examiner Invite Template (.docx)</label>
-                    <input type="text" name="path_internal" value="{{ paths.path_internal or 'templates/Internal_Examiner_Initial_Email.docx' }}">
+                    <input type="text" name="path_internal" value="{{ paths.path_internal or 'templates/Internal_Examiner_Invite.docx' }}">
+                </div>
+                <div class="form-group">
+                    <label>External Examiner Invite Template (.docx)</label>
+                    <input type="text" name="path_external" value="{{ paths.path_external or 'templates/External_Examiner_Invite.docx' }}">
                 </div>
                 <div class="form-group">
                     <label>Triad Confirmation Template (.docx)</label>
-                    <input type="text" name="path_triad" value="{{ paths.path_triad or 'templates/External_Examiner_Initial_Email.docx' }}">
+                    <input type="text" name="path_triad" value="{{ paths.path_triad or 'templates/Triad_Allocation_Notice.docx' }}">
                 </div>
                 <button type="submit" class="btn btn-primary btn-sm">Save Template Paths</button>
                 <div id="paths-result" style="margin-top: 10px;"></div>
@@ -60,7 +64,17 @@
 
                 <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px; background-color: rgba(255,255,255,0.02); border-radius: var(--radius-sm); border: 1px solid var(--border);">
                     <div>
-                        <strong style="display: block; font-size: 0.95rem;">3. Triad Confirmations</strong>
+                        <strong style="display: block; font-size: 0.95rem;">3. External Examiner Invites</strong>
+                        <span style="font-size: 0.8rem; color: var(--text-secondary);">Sends invite to assigned external examiners.</span>
+                    </div>
+                    <button hx-post="/mail-merge/run/external" hx-target="#merge-console" hx-indicator="#merge-indicator" class="btn btn-secondary btn-sm">
+                        Create Drafts
+                    </button>
+                </div>
+
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px; background-color: rgba(255,255,255,0.02); border-radius: var(--radius-sm); border: 1px solid var(--border);">
+                    <div>
+                        <strong style="display: block; font-size: 0.95rem;">4. Triad Confirmations</strong>
                         <span style="font-size: 0.8rem; color: var(--text-secondary);">Sends confirmation to trainee + internal + external examiners.</span>
                     </div>
                     <button hx-post="/mail-merge/run/triad" hx-target="#merge-console" hx-indicator="#merge-indicator" class="btn btn-secondary btn-sm">

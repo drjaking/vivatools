@@ -1,9 +1,9 @@
 """
-intexaminer_email1.py (v6: flag deferred in subject)
-============================================
+extexaminer_email1.py
+======================
 
-Mail-merge for internal examiners with thesis title, deferred flag, and top-5 categories.
-Inserts rendered DOCX template into email body and annotates subject for deferred students.
+Mail-merge for external examiners with thesis title, supervisors, and deferred flag.
+Inserts a plain-text formatting table into the email body and groups by examiner.
 """
 import argparse
 import logging
@@ -14,9 +14,9 @@ from docxtpl import DocxTemplate
 import win32com.client as win32
 
 # ---------------------------------------------------------------------------
-# Fetch internal assignments with peer examiner, thesis title, deferred flag, and supervisors
+# Fetch external assignments with thesis title, deferred flag, and supervisors
 # ---------------------------------------------------------------------------
-def fetch_internal_assignments(cur):
+def fetch_external_assignments(cur):
     cur.execute("""
         SELECT
           ia.student_id,
@@ -25,15 +25,15 @@ def fetch_internal_assignments(cur):
           s.project_title   AS thesis_title,
           COALESCE(s.deferred, FALSE) AS is_deferred,
           ia.examiner_id    AS examiner_id,
-          i.full_name       AS examiner_name,
-          i.email           AS examiner_email,
+          e.full_name       AS examiner_name,
+          e.email           AS examiner_email,
           sup.supervisors   AS supervisors
         FROM examiner_assignments ia
         JOIN students s ON s.student_id = ia.student_id
-        JOIN examiners i ON i.examiner_id = ia.examiner_id
+        JOIN examiners e ON e.examiner_id = ia.examiner_id
         LEFT JOIN student_supervisors sup ON sup.student_id = ia.student_id
-        WHERE ia.role = 'internal'
-        ORDER BY i.full_name, s.full_name
+        WHERE ia.role = 'external'
+        ORDER BY e.full_name, s.full_name
     """)
     return cur.fetchall()
 
@@ -107,7 +107,7 @@ def process_records(records, template_path: Path, send=False):
 # ---------------------------------------------------------------------------
 def main():
     parser = argparse.ArgumentParser(
-        description="Mail-merge for internal examiners with consolidated allocations."
+        description="Mail-merge for external examiners with consolidated allocations."
     )
     parser.add_argument('--dsn', required=True, help='PostgreSQL DSN')
     parser.add_argument('--template', required=True, type=Path, help='Path to DOCX template')
@@ -117,10 +117,9 @@ def main():
     logging.basicConfig(level=logging.INFO)
     with psycopg2.connect(args.dsn) as conn:
         cur = conn.cursor()
-        records = fetch_internal_assignments(cur)
+        records = fetch_external_assignments(cur)
 
     process_records(records, args.template, send=args.send)
 
 if __name__ == '__main__':
     main()
-

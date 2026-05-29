@@ -76,10 +76,10 @@ def render_email(record: tuple, template_path: Path) -> tuple[str, str, str]:
                top_5_categories=top5 or '',
                deferred="Yes" if is_def else "No")
     doc.render(ctx)
-    body = "\n".join(p.text for p in doc.docx.paragraphs)
+    body = "\n\n".join(p.text for p in doc.docx.paragraphs if p.text.strip())
 
     subj = "IMPORTANT - UCL DClinPsy Thesis allocations" + (" (deferred)" if is_def else "")
-    to_addr = "; ".join([internal_email, external_email, student_email])
+    to_addr = "; ".join(e for e in [internal_email, external_email, student_email] if e)
     return to_addr, subj, body
 
 # ---------------------------------------------------------------------------

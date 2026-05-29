@@ -27,8 +27,10 @@ Options
 """
 import argparse
 import logging
+from pathlib import Path
 
 import psycopg2
+from docxtpl import DocxTemplate
 import win32com.client as win32
 
 # ---------------------------------------------------------------------------
@@ -64,32 +66,49 @@ def fetch_student_assignments(cur):
 # ---------------------------------------------------------------------------
 # Compose and send or print emails, including deferred note
 # ---------------------------------------------------------------------------
-def send_notifications(records, send=False):
+def send_notifications(records, template_path=None, send=False):
     outlook = win32.Dispatch('Outlook.Application')
     for (_sid, student_name, student_email, is_deferred,
          int_name, _int_email, ext_name, _ext_email) in records:
         subject = "Your Viva Examiners (provisional)"
-        lines = [
-            f"Dear {student_name},",
-            "",
-            "You have been provisionally assigned the following viva examiners:",
-            f"  • Internal Examiner: {int_name}",
-            f"  • External Examiner: {ext_name}",
-            "",
-            "If you believe there is any conflict of interest (for example, an examiner who \
+        
+        if template_path and template_path.exists():
+            try:
+                doc = DocxTemplate(str(template_path))
+                context = {
+                    'student_name': student_name,
+                    'internal_name': int_name,
+                    'external_name': ext_name,
+                    'is_deferred': is_deferred
+                }
+                doc.render(context)
+                body = "\n\n".join(p.text for p in doc.docx.paragraphs if p.text.strip())
+            except Exception as e:
+                logging.error(f"Error rendering template, falling back to text: {e}")
+                template_path = None # Force fallback
+                
+        if not template_path or not template_path.exists():
+            lines = [
+                f"Dear {student_name},",
+                "",
+                "You have been provisionally assigned the following viva examiners:",
+                f"  • Internal Examiner: {int_name}",
+                f"  • External Examiner: {ext_name}",
+                "",
+                "If you believe there is any conflict of interest (for example, an examiner who \
  has supervised your project), please contact john.king@ucl.ac.uk as soon as possible.",
-            "",
-            "We don't need to hear about tutors, proposal reviewers, or stats demonstrators.",
-            ""
-        ]
-        if is_deferred:
-            lines.extend([
-                "Note: your deferred status is not affected by this allocation; \
-these are the examiners who will conduct your viva when the time comes.",
+                "",
+                "We don't need to hear about tutors, proposal reviewers, or stats demonstrators.",
                 ""
-            ])
-        lines.extend(["Kind regards,", "John"])
-        body = "\n".join(lines)
+            ]
+            if is_deferred:
+                lines.extend([
+                    "Note: your deferred status is not affected by this allocation; \
+these are the examiners who will conduct your viva when the time comes.",
+                    ""
+                ])
+            lines.extend(["Kind regards,", "John"])
+            body = "\n".join(lines)
 
         if not send:
             print("---")
@@ -113,6 +132,7 @@ def main():
         description="Send initial viva assignment emails to trainees."
     )
     parser.add_argument('--dsn', required=True, help='PostgreSQL DSN')
+    parser.add_argument('--template', type=Path, default=Path('templates/Trainee_Initial_Email.docx'), help='Path to DOCX template')
     parser.add_argument('--send', action='store_true', help='Actually send emails (default: dry-run)')
     args = parser.parse_args()
 
@@ -121,7 +141,7 @@ def main():
         cur = conn.cursor()
         records = fetch_student_assignments(cur)
 
-    send_notifications(records, send=args.send)
+    send_notifications(records, template_path=args.template, send=args.send)
 
 if __name__ == '__main__':
     main()

@@ -54,8 +54,9 @@ def startup_event():
         # Initialize default paths
         defaults = {
             "path_trainee": "templates/Trainee_Initial_Email.docx",
-            "path_internal": "templates/Internal_Examiner_Initial_Email.docx",
-            "path_triad": "templates/External_Examiner_Initial_Email.docx"
+            "path_internal": "templates/Internal_Examiner_Invite.docx",
+            "path_external": "templates/External_Examiner_Invite.docx",
+            "path_triad": "templates/Triad_Allocation_Notice.docx"
         }
         for k, v in defaults.items():
             cur.execute("""
@@ -2370,12 +2371,14 @@ def get_mail_merge(request: Request):
 async def save_paths(
     path_trainee: str = Form(...),
     path_internal: str = Form(...),
+    path_external: str = Form(...),
     path_triad: str = Form(...)
 ):
     conn = get_db_conn()
     with conn, conn.cursor() as cur:
         cur.execute("UPDATE system_settings SET value = %s WHERE key = 'path_trainee'", (path_trainee.strip(),))
         cur.execute("UPDATE system_settings SET value = %s WHERE key = 'path_internal'", (path_internal.strip(),))
+        cur.execute("UPDATE system_settings SET value = %s WHERE key = 'path_external'", (path_external.strip(),))
         cur.execute("UPDATE system_settings SET value = %s WHERE key = 'path_triad'", (path_triad.strip(),))
     conn.commit()
     conn.close()
@@ -2390,108 +2393,252 @@ async def preview_mail(student_id: int = Form(...)):
         # Fetch selected student details
         cur.execute("""
             SELECT s.student_id, s.full_name AS student_name, s.project_title,
+                   COALESCE(s.deferred, FALSE) AS is_deferred,
                    sup.supervisors,
+                   MAX(CASE WHEN ea.role='internal' THEN ex.examiner_id END) AS internal_id,
                    MAX(CASE WHEN ea.role='internal' THEN ex.full_name END) AS internal_name,
+                   MAX(CASE WHEN ea.role='external' THEN ex.examiner_id END) AS external_id,
                    MAX(CASE WHEN ea.role='external' THEN ex.full_name END) AS external_name
             FROM students s
             LEFT JOIN student_supervisors sup USING (student_id)
             LEFT JOIN examiner_assignments ea USING (student_id)
             LEFT JOIN examiners ex ON ea.examiner_id = ex.examiner_id
             WHERE s.student_id = %s
-            GROUP BY s.student_id, sup.supervisors
+            GROUP BY s.student_id, s.deferred, sup.supervisors
         """, (student_id,))
         row = cur.fetchone()
+        
+        if not row:
+            conn.close()
+            return HTMLResponse(content='<div style="color: var(--danger);">Student not found.</div>')
+            
+        student_name = row['student_name']
+        project_title = row['project_title'] or "[No Project Title]"
+        supervisors = row['supervisors'] or "[No Supervisors Configured]"
+        internal_id = row['internal_id']
+        internal_name = row['internal_name'] or "[No Internal Assigned]"
+        external_id = row['external_id']
+        external_name = row['external_name'] or "[No External Assigned]"
+        is_deferred = row['is_deferred']
+        
+        # 1. Trainee Email (Initial Info Preview)
+        trainee_text = ""
+        try:
+            p_path = Path(paths.get('path_trainee', 'templates/Trainee_Initial_Email.docx'))
+            if p_path.exists():
+                doc = DocxTemplate(str(p_path))
+                context = {
+                    'student_name': student_name,
+                    'internal_name': internal_name,
+                    'external_name': external_name,
+                    'is_deferred': is_deferred
+                }
+                doc.render(context)
+                temp_f = tempfile.NamedTemporaryFile(suffix=".docx", delete=False)
+                temp_f.close()
+                doc.save(temp_f.name)
+                
+                docx_doc = Document(temp_f.name)
+                paragraphs = [p.text for p in docx_doc.paragraphs if p.text.strip()]
+                trainee_text = "".join(f"<p style='margin-bottom:8px;'>{p}</p>" for p in paragraphs)
+                Path(temp_f.name).unlink()
+            else:
+                # Fallback to the exact text sent by trainee_email_initial.py
+                subject = "Your Viva Examiners (provisional)"
+                lines = [
+                    f"<strong>Subject:</strong> {subject}",
+                    "<hr style='border:0; border-top: 1px solid var(--border); margin: 8px 0;'>",
+                    f"Dear {student_name},",
+                    "",
+                    "You have been provisionally assigned the following viva examiners:",
+                    f"  • Internal Examiner: {internal_name}",
+                    f"  • External Examiner: {external_name}",
+                    "",
+                    "If you believe there is any conflict of interest (for example, an examiner who has supervised your project), please contact john.king@ucl.ac.uk as soon as possible.",
+                    "",
+                    "We don't need to hear about tutors, proposal reviewers, or stats demonstrators.",
+                    ""
+                ]
+                if is_deferred:
+                    lines.extend([
+                        "Note: your deferred status is not affected by this allocation; these are the examiners who will conduct your viva when the time comes.",
+                        ""
+                    ])
+                lines.extend(["Kind regards,", "John"])
+                trainee_text = "".join(
+                    f"<p style='margin-bottom:8px;'>{line}</p>" if line.strip() else "<div style='height:8px;'></div>" 
+                    for line in lines
+                )
+        except Exception as e:
+            trainee_text = f"<em>Error rendering trainee preview: {str(e)}</em>"
+            
+        # 2. Internal Examiner Invite (Consolidated allocations list preview)
+        internal_text = ""
+        if internal_id:
+            try:
+                p_path = Path(paths.get('path_internal', 'templates/Internal_Examiner_Invite.docx'))
+                if p_path.exists():
+                    cur.execute("""
+                        SELECT s.full_name, s.project_title, COALESCE(s.deferred, FALSE) AS is_deferred, sup.supervisors
+                        FROM examiner_assignments ea
+                        JOIN students s USING (student_id)
+                        LEFT JOIN student_supervisors sup USING (student_id)
+                        WHERE ea.examiner_id = %s AND ea.role = 'internal'
+                        ORDER BY s.full_name
+                    """, (internal_id,))
+                    assignments = cur.fetchall()
+                    
+                    tbl_rows = []
+                    for r in assignments:
+                        tbl_rows.append({
+                            'student_name': r['full_name'],
+                            'thesis_title': r['project_title'] or '[No Thesis Title]',
+                            'supervisors': r['supervisors'] or '[No Supervisors Listed]',
+                            'deferred_status': 'Deferred' if r['is_deferred'] else 'submitting'
+                        })
+                        
+                    doc = DocxTemplate(str(p_path))
+                    doc.render({
+                        'examiner_name': internal_name,
+                        'tbl_rows': tbl_rows
+                    })
+                    temp_f = tempfile.NamedTemporaryFile(suffix=".docx", delete=False)
+                    temp_f.close()
+                    doc.save(temp_f.name)
+                    
+                    docx_doc = Document(temp_f.name)
+                    paragraphs = [p.text for p in docx_doc.paragraphs if p.text.strip()]
+                    internal_text = "".join(f"<p style='margin-bottom:8px;'>{p}</p>" for p in paragraphs)
+                    
+                    # Add styled preview table in HTML
+                    table_html = """
+                    <table style="width:100%; border-collapse:collapse; margin-top:16px; font-size:0.85rem; border:1px solid var(--border);">
+                        <thead>
+                            <tr style="background-color:rgba(255,255,255,0.03); border-bottom:1px solid var(--border);">
+                                <th style="padding:8px; text-align:left; border-right:1px solid var(--border);">Student</th>
+                                <th style="padding:8px; text-align:left; border-right:1px solid var(--border);">Thesis Title</th>
+                                <th style="padding:8px; text-align:left; border-right:1px solid var(--border);">Supervisors</th>
+                                <th style="padding:8px; text-align:left;">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                    """
+                    for r in tbl_rows:
+                        table_html += f"""
+                            <tr style="border-bottom:1px solid var(--border);">
+                                <td style="padding:8px; border-right:1px solid var(--border); font-weight:500;">{r['student_name']}</td>
+                                <td style="padding:8px; border-right:1px solid var(--border);">{r['thesis_title']}</td>
+                                <td style="padding:8px; border-right:1px solid var(--border); color:var(--text-secondary);">{r['supervisors']}</td>
+                                <td style="padding:8px;"><span class="badge {'badge-warning' if r['deferred_status']=='Deferred' else 'badge-success'}">{r['deferred_status']}</span></td>
+                            </tr>
+                        """
+                    table_html += "</tbody></table>"
+                    internal_text += table_html
+                    Path(temp_f.name).unlink()
+                else:
+                    internal_text = f"<em>Internal Template file not found at: {p_path}</em>"
+            except Exception as e:
+                internal_text = f"<em>Error rendering internal invite preview: {str(e)}</em>"
+        else:
+            internal_text = "<em>No Internal Examiner assigned to this student.</em>"
+            
+        # 3. External Examiner Invite (Consolidated allocations list preview)
+        external_text = ""
+        if external_id:
+            try:
+                p_path = Path(paths.get('path_external', 'templates/External_Examiner_Invite.docx'))
+                if p_path.exists():
+                    cur.execute("""
+                        SELECT s.full_name, s.project_title, COALESCE(s.deferred, FALSE) AS is_deferred, sup.supervisors
+                        FROM examiner_assignments ea
+                        JOIN students s USING (student_id)
+                        LEFT JOIN student_supervisors sup USING (student_id)
+                        WHERE ea.examiner_id = %s AND ea.role = 'external'
+                        ORDER BY s.full_name
+                    """, (external_id,))
+                    assignments = cur.fetchall()
+                    
+                    tbl_rows = []
+                    for r in assignments:
+                        tbl_rows.append({
+                            'student_name': r['full_name'],
+                            'thesis_title': r['project_title'] or '[No Thesis Title]',
+                            'supervisors': r['supervisors'] or '[No Supervisors Listed]',
+                            'deferred_status': 'Deferred' if r['is_deferred'] else 'submitting'
+                        })
+                        
+                    doc = DocxTemplate(str(p_path))
+                    doc.render({
+                        'examiner_name': external_name,
+                        'tbl_rows': tbl_rows
+                    })
+                    temp_f = tempfile.NamedTemporaryFile(suffix=".docx", delete=False)
+                    temp_f.close()
+                    doc.save(temp_f.name)
+                    
+                    docx_doc = Document(temp_f.name)
+                    paragraphs = [p.text for p in docx_doc.paragraphs if p.text.strip()]
+                    external_text = "".join(f"<p style='margin-bottom:8px;'>{p}</p>" for p in paragraphs)
+                    
+                    # Add styled preview table in HTML
+                    table_html = """
+                    <table style="width:100%; border-collapse:collapse; margin-top:16px; font-size:0.85rem; border:1px solid var(--border);">
+                        <thead>
+                            <tr style="background-color:rgba(255,255,255,0.03); border-bottom:1px solid var(--border);">
+                                <th style="padding:8px; text-align:left; border-right:1px solid var(--border);">Student</th>
+                                <th style="padding:8px; text-align:left; border-right:1px solid var(--border);">Thesis Title</th>
+                                <th style="padding:8px; text-align:left; border-right:1px solid var(--border);">Supervisors</th>
+                                <th style="padding:8px; text-align:left;">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                    """
+                    for r in tbl_rows:
+                        table_html += f"""
+                            <tr style="border-bottom:1px solid var(--border);">
+                                <td style="padding:8px; border-right:1px solid var(--border); font-weight:500;">{r['student_name']}</td>
+                                <td style="padding:8px; border-right:1px solid var(--border);">{r['thesis_title']}</td>
+                                <td style="padding:8px; border-right:1px solid var(--border); color:var(--text-secondary);">{r['supervisors']}</td>
+                                <td style="padding:8px;"><span class="badge {'badge-warning' if r['deferred_status']=='Deferred' else 'badge-success'}">{r['deferred_status']}</span></td>
+                            </tr>
+                        """
+                    table_html += "</tbody></table>"
+                    external_text += table_html
+                    Path(temp_f.name).unlink()
+                else:
+                    external_text = f"<em>External Template file not found at: {p_path}</em>"
+            except Exception as e:
+                external_text = f"<em>Error rendering external invite preview: {str(e)}</em>"
+        else:
+            external_text = "<em>No External Examiner assigned to this student.</em>"
+            
+        # 4. Triad Allocation Notice Preview
+        triad_text = ""
+        try:
+            p_path = Path(paths.get('path_triad', 'templates/Triad_Allocation_Notice.docx'))
+            if p_path.exists():
+                doc = DocxTemplate(str(p_path))
+                doc.render({
+                    'student_name': student_name,
+                    'thesis_title': project_title,
+                    'internal_name': internal_name,
+                    'external_name': external_name
+                })
+                temp_f = tempfile.NamedTemporaryFile(suffix=".docx", delete=False)
+                temp_f.close()
+                doc.save(temp_f.name)
+                
+                docx_doc = Document(temp_f.name)
+                paragraphs = [p.text for p in docx_doc.paragraphs if p.text.strip()]
+                triad_text = "".join(f"<p style='margin-bottom:8px;'>{p}</p>" for p in paragraphs)
+                Path(temp_f.name).unlink()
+            else:
+                triad_text = f"<em>Triad Template file not found at: {p_path}</em>"
+        except Exception as e:
+            triad_text = f"<em>Error rendering triad notice preview: {str(e)}</em>"
+            
     conn.close()
     
-    if not row:
-        return HTMLResponse(content='<div style="color: var(--danger);">Student not found.</div>')
-        
-    student_name = row['student_name']
-    project_title = row['project_title'] or "[No Project Title]"
-    supervisors = row['supervisors'] or "[No Supervisors Configured]"
-    internal_name = row['internal_name'] or "[No Internal Assigned]"
-    external_name = row['external_name'] or "[No External Assigned]"
-    
-    # Let's perform rendering in-memory for preview
-    # 1. Trainee Email
-    trainee_text = ""
-    try:
-        p_path = Path(paths.get('path_trainee', 'templates/Trainee_Initial_Email.docx'))
-        if p_path.exists():
-            doc = DocxTemplate(str(p_path))
-            context = {
-                'student': student_name,
-                'internal_examiner': internal_name,
-                'external_examiner': external_name,
-                'project_title': project_title
-            }
-            doc.render(context)
-            temp_f = tempfile.NamedTemporaryFile(suffix=".docx", delete=False)
-            temp_f.close()
-            doc.save(temp_f.name)
-            
-            # Read paragraphs
-            docx_doc = Document(temp_f.name)
-            paragraphs = [p.text for p in docx_doc.paragraphs if p.text.strip()]
-            trainee_text = "".join(f"<p style='margin-bottom:8px;'>{p}</p>" for p in paragraphs)
-            Path(temp_f.name).unlink()
-        else:
-            trainee_text = f"<em>Trainee Template file not found at: {p_path}</em>"
-    except Exception as e:
-        trainee_text = f"<em>Error rendering trainee preview: {str(e)}</em>"
-        
-    # 2. Internal Examiner Invite Email
-    internal_text = ""
-    try:
-        p_path = Path(paths.get('path_internal', 'templates/Internal_Examiner_Initial_Email.docx'))
-        if p_path.exists():
-            doc = DocxTemplate(str(p_path))
-            context = {
-                'internal_examiner': internal_name,
-                'student': student_name,
-                'project_title': project_title,
-                'supervisors': supervisors
-            }
-            doc.render(context)
-            temp_f = tempfile.NamedTemporaryFile(suffix=".docx", delete=False)
-            temp_f.close()
-            doc.save(temp_f.name)
-            
-            docx_doc = Document(temp_f.name)
-            paragraphs = [p.text for p in docx_doc.paragraphs if p.text.strip()]
-            internal_text = "".join(f"<p style='margin-bottom:8px;'>{p}</p>" for p in paragraphs)
-            Path(temp_f.name).unlink()
-        else:
-            internal_text = f"<em>Internal Template file not found at: {p_path}</em>"
-    except Exception as e:
-        internal_text = f"<em>Error rendering internal invite preview: {str(e)}</em>"
-        
-    # 3. Triad Email (External)
-    external_text = ""
-    try:
-        p_path = Path(paths.get('path_triad', 'templates/External_Examiner_Initial_Email.docx'))
-        if p_path.exists():
-            doc = DocxTemplate(str(p_path))
-            context = {
-                'external_examiner': external_name,
-                'student': student_name,
-                'internal_examiner': internal_name,
-                'project_title': project_title
-            }
-            doc.render(context)
-            temp_f = tempfile.NamedTemporaryFile(suffix=".docx", delete=False)
-            temp_f.close()
-            doc.save(temp_f.name)
-            
-            docx_doc = Document(temp_f.name)
-            paragraphs = [p.text for p in docx_doc.paragraphs if p.text.strip()]
-            external_text = "".join(f"<p style='margin-bottom:8px;'>{p}</p>" for p in paragraphs)
-            Path(temp_f.name).unlink()
-        else:
-            external_text = f"<em>External Template file not found at: {p_path}</em>"
-    except Exception as e:
-        external_text = f"<em>Error rendering external/triad preview: {str(e)}</em>"
-
     html = f"""
     <div style="margin-bottom: 24px;">
         <h4 style="border-bottom: 1px solid var(--border); padding-bottom: 4px; margin-bottom: 8px; color: var(--accent);">
@@ -2504,19 +2651,28 @@ async def preview_mail(student_id: int = Form(...)):
     
     <div style="margin-bottom: 24px;">
         <h4 style="border-bottom: 1px solid var(--border); padding-bottom: 4px; margin-bottom: 8px; color: var(--success);">
-            Internal Examiner Email Preview
+            Internal Examiner Email Preview (Consolidated)
         </h4>
-        <div style="background-color: var(--bg-secondary); padding: 12px; border-radius: 4px; border: 1px solid var(--border); max-height: 200px; overflow-y: auto;">
+        <div style="background-color: var(--bg-secondary); padding: 12px; border-radius: 4px; border: 1px solid var(--border); max-height: 350px; overflow-y: auto;">
             {internal_text}
         </div>
     </div>
 
-    <div>
+    <div style="margin-bottom: 24px;">
         <h4 style="border-bottom: 1px solid var(--border); padding-bottom: 4px; margin-bottom: 8px; color: var(--warning);">
-            Triad (External Examiner) Email Preview
+            External Examiner Email Preview (Consolidated)
         </h4>
-        <div style="background-color: var(--bg-secondary); padding: 12px; border-radius: 4px; border: 1px solid var(--border); max-height: 200px; overflow-y: auto;">
+        <div style="background-color: var(--bg-secondary); padding: 12px; border-radius: 4px; border: 1px solid var(--border); max-height: 350px; overflow-y: auto;">
             {external_text}
+        </div>
+    </div>
+
+    <div>
+        <h4 style="border-bottom: 1px solid var(--border); padding-bottom: 4px; margin-bottom: 8px; color: #38bdf8;">
+            Triad Allocation Notice Preview
+        </h4>
+        <div style="background-color: var(--bg-secondary); padding: 12px; border-radius: 4px; border: 1px solid var(--border); max-height: 250px; overflow-y: auto;">
+            {triad_text}
         </div>
     </div>
     """
@@ -2527,7 +2683,14 @@ async def preview_mail(student_id: int = Form(...)):
 @app.post("/mail-merge/run/trainee")
 def run_trainee_merge():
     try:
-        cmd = [sys.executable, "trainee_email_initial.py", "--dsn", DB_DSN]
+        conn = get_db_conn()
+        with conn, conn.cursor() as cur:
+            cur.execute("SELECT value FROM system_settings WHERE key = 'path_trainee'")
+            row = cur.fetchone()
+            path_val = row[0] if row else "templates/Trainee_Initial_Email.docx"
+        conn.close()
+        
+        cmd = [sys.executable, "trainee_email_initial.py", "--dsn", DB_DSN, "--template", path_val]
         res = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
         output = res.stdout + "\n" + res.stderr
         status_msg = "SUCCESS" if res.returncode == 0 else "FAILED"
@@ -2538,7 +2701,14 @@ def run_trainee_merge():
 @app.post("/mail-merge/run/internal")
 def run_internal_merge():
     try:
-        cmd = [sys.executable, "intexaminer_email1.py", "--dsn", DB_DSN]
+        conn = get_db_conn()
+        with conn, conn.cursor() as cur:
+            cur.execute("SELECT value FROM system_settings WHERE key = 'path_internal'")
+            row = cur.fetchone()
+            path_val = row[0] if row else "templates/Internal_Examiner_Invite.docx"
+        conn.close()
+        
+        cmd = [sys.executable, "intexaminer_email1.py", "--dsn", DB_DSN, "--template", path_val]
         res = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
         output = res.stdout + "\n" + res.stderr
         status_msg = "SUCCESS" if res.returncode == 0 else "FAILED"
@@ -2546,10 +2716,35 @@ def run_internal_merge():
     except Exception as e:
         return HTMLResponse(content=f"<pre>Exception: {str(e)}</pre>")
 
+@app.post("/mail-merge/run/external")
+def run_external_merge():
+    try:
+        conn = get_db_conn()
+        with conn, conn.cursor() as cur:
+            cur.execute("SELECT value FROM system_settings WHERE key = 'path_external'")
+            row = cur.fetchone()
+            path_val = row[0] if row else "templates/External_Examiner_Invite.docx"
+        conn.close()
+        
+        cmd = [sys.executable, "extexaminer_email1.py", "--dsn", DB_DSN, "--template", path_val]
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        output = res.stdout + "\n" + res.stderr
+        status_msg = "SUCCESS" if res.returncode == 0 else "FAILED"
+        return HTMLResponse(content=f"<pre>=== EXTERNAL EMAIL MERGE {status_msg} ===\n{output}</pre>")
+    except Exception as e:
+        return HTMLResponse(content=f"<pre>Exception: {str(e)}</pre>")
+
 @app.post("/mail-merge/run/triad")
 def run_triad_merge():
     try:
-        cmd = [sys.executable, "triad_emailer2.py", "--dsn", DB_DSN]
+        conn = get_db_conn()
+        with conn, conn.cursor() as cur:
+            cur.execute("SELECT value FROM system_settings WHERE key = 'path_triad'")
+            row = cur.fetchone()
+            path_val = row[0] if row else "templates/Triad_Allocation_Notice.docx"
+        conn.close()
+        
+        cmd = [sys.executable, "triad_emailer2.py", "--dsn", DB_DSN, "--template", path_val]
         res = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
         output = res.stdout + "\n" + res.stderr
         status_msg = "SUCCESS" if res.returncode == 0 else "FAILED"
